@@ -7857,8 +7857,8 @@ function renderAdmin(){let p=$('admPanel');if(!p){p=mk('aside');p.id='admPanel';
     sec('Level '+ACC.level);row(btn('+1 level',()=>{ACC.level++}),btn('+10 levels',()=>{ACC.level+=10}),btn('Level 1',()=>{ACC.level=1;ACC.lvlXP=0},'mini ghostish'));
     const k=rankInfo(ACC.mm.r);sec(`Rank · ${k.name} (rating ${Math.round(ACC.mm.r)})`);const r=row();for(let t=0;t<RANKS.length;t++){r.appendChild(btn(RANKS[t][0],()=>{ACC.mm.r=t===7?APEX+50:t*3*DIV+DIV*.5;ACC.mm.n=Math.max(ACC.mm.n,5);ACC.mm.placed=true;ACC.mm.peak=Math.max(ACC.mm.peak||0,ACC.mm.r)},'mini ghostish'))}
     sec('Danger');const wb=mk('button','mini ghostish','Reset all progress');wb.onclick=()=>ask('Wipe all your progress on this browser? This cannot be undone.',()=>{ACC.shards=0;store.set('bz3.prog','null');setTimeout(()=>location.reload(),50)},'Wipe');row(wb)}
-  else if(ADM.tab==='match'){sec('Cheats (only in your own game; turned off in online matches)');const C=ADM.cheats;
-    for(const[k,l]of[['god','God mode'],['ammo','Infinite ammo, no reload'],['oneshot','One-shot kills'],['lowg','Low gravity'],['wall','See enemies through walls']]){const b=mk('button','mini'+(C[k]?'':' ghostish'),(C[k]?'ON · ':'OFF · ')+l);b.onclick=()=>{C[k]=!C[k];if(k==='lowg')GMUL=C.lowg?.42:(MAPID==='moonbase'?.42:1);renderAdmin()};row(b)}
+  else if(ADM.tab==='match'){sec('Cheats (work in every game, online included · F2 opens this panel in a match)');const C=ADM.cheats;
+    for(const[k,l]of[['god','God mode'],['ammo','Infinite ammo, no reload'],['oneshot','One-shot kills'],['lowg','Low gravity'],['wall','See enemies through walls'],['speed','Super speed'],['jump','Super jump'],['norecoil','No recoil'],['rapid','Rapid fire'],['abil','Infinite abilities and ultimate'],['ghost','Bots ignore you'],['freeze','Freeze bots'],['fastplant','Instant plant and defuse']]){const b=mk('button','mini'+(C[k]?'':' ghostish'),(C[k]?'ON · ':'OFF · ')+l);b.onclick=()=>{C[k]=!C[k];if(k==='lowg')GMUL=C.lowg?.42:(MAPID==='moonbase'?.42:1);renderAdmin()};row(b)}
     sec('Test sounds');row(btn('Match found',()=>sMatchFound()),btn('Victory',()=>sVictory()),btn('Defeat',()=>sDefeat()),btn('Button click',()=>{initAudio();sUiClick()}));
     sec('Instant');row(btn('Kill all enemies',()=>{if(!mode||!P)return;for(const a of agents)if(a!==P&&a.alive&&!a.remote&&!sameTeam(a,P))kill(a,P,true,'Admin')}),btn('Full heal',()=>{if(P){P.hp=100;P.shield=50}}),btn('Ultimate ready',()=>{if(P)P.ult=CHARS[P.char].x.cost}),btn('9000 credits',()=>{if(P)P.credits=9000}));
     row(mk('p','note','Open this panel from the lobby, or press Escape in a match to pause and use the nav.'))}
@@ -7882,11 +7882,11 @@ function renderAdmin(){let p=$('admPanel');if(!p){p=mk('aside');p.id='admPanel';
       si.onfocus=run;si.oninput=run}
     p.appendChild(mk('p','note','Admins get this panel on their own account. The list is saved on the page, so it carries over to every device.'))}}
 // cheats in play (never in online matches)
-const offline=()=>mode&&mode!=='odm'&&mode!=='otdm';
+const offline=()=>!!mode;// admin cheats now work in every game, online included
 stepFx=(o=>function(dt){o.apply(this,arguments);if(!isAdmin()||!offline()||!P)return;const C=ADM.cheats;
   if(C.god&&P.alive){P.hp=100;P.shield=Math.max(P.shield||0,50)}
   if(C.ammo&&P.alive){const w=cur(P);const g=w&&GUNS[w.gun];if(g&&!g.melee&&g.mag){w.ammo=g.mag;P.reload=0}}
-  if(C.wall){for(const a of agents){if(a===P||!a.mesh||sameTeam(a,P))continue;a.mesh.traverse(n=>{if(n.isMesh&&n.material&&!n.userData.admW){n.userData.admW=1;n.material=n.material.clone();n.material.depthTest=false;n.renderOrder=999}})}}})(stepFx);
+  if(C.wall){for(const a of(mp&&(mode==='odm'||mode==='otdm')?[...mp.remotes.values()]:agents)){if(a===P||!a.mesh||sameTeam(a,P))continue;a.mesh.traverse(n=>{if(n.isMesh&&n.material&&!n.userData.admW){n.userData.admW=1;n.material=n.material.clone();n.material.depthTest=false;n.renderOrder=999}})}}})(stepFx);
 damage=(o=>function(t,amount,att){if(att&&att===P&&ADM.cheats.oneshot&&isAdmin()&&offline()&&t!==P)amount=Math.max(amount,999);return o.call(this,t,amount,att,arguments[3],arguments[4])})(damage);
 // announcements from admins
 const ANN_SEEN=new Set();setInterval(()=>{if(!ROOM)return;for(const p of lobbyPeers()){const a=p.presence.ann;if(!a||typeof a.text!=='string'||ANN_SEEN.has(a.t))continue;ANN_SEEN.add(a.t);
@@ -8359,7 +8359,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'69',t:'29 Oct 2026, 8:30 PM'};
+const GAME_VERSION={n:'70',t:'29 Oct 2026, 8:57 PM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
@@ -8900,6 +8900,53 @@ try{MAP_COL.kasbah='#e3a457';MAP_COL.rustveil='#6dd6a0'}catch(e){}
   const per=(W+H)*2;for(let d=0;d<per;d+=180+R()*160){let x,z,nx,nz;if(d<W){x=d;z=0;nx=0;nz=-1}else if(d<W+H){x=W;z=d-W;nx=1;nz=0}else if(d<2*W+H){x=2*W+H-d;z=H;nx=0;nz=1}else{x=0;z=per-d;nx=-1;nz=0}
     const off=120+R()*600,h=330+R()*420,w=150+R()*200,dd=150+R()*200;const g=new THREE.BoxGeometry(w,h,dd);g.translate(x+nx*off,h/2,z+nz*off);sk.push(g)}
   add(sk,bm,{cast:false})})();
+
+/* ================= admin panel, round 2 =================
+   - Press F2 in any match (or use the button in the pause menu) to open the admin panel and switch cheats on and off mid-game.
+   - Cheats now work in every game, online included.
+   - More cheats: super speed, super jump, no recoil, rapid fire, infinite abilities, bots ignore you, freeze bots, instant plant/defuse.
+   - More instant actions: skip the buy phase, win the round, respawn, teleport to a site, give yourself any gun. */
+(()=>{const st=document.createElement('style');st.textContent='#admPanel{z-index:95!important}';document.head.appendChild(st)})();
+function toggleAdminPanel(){if(!isAdmin())return;ADM.open=!ADM.open;if(ADM.open){if(mode)ADM.tab='match';try{if(document.pointerLockElement)document.exitPointerLock()}catch(e){}}renderAdmin()}
+window.addEventListener('keydown',e=>{if(e.code==='F2'||e.key==='F2'){e.preventDefault();e.stopPropagation();toggleAdminPanel()}},true);
+// a button in the pause menu
+(function(){const p=$('pause');if(!p)return;const b=mk('button','ghost','Admin panel (F2)');b.id='admPauseBtn';b.type='button';b.style.marginTop='10px';b.onclick=e=>{e.stopPropagation();toggleAdminPanel()};
+  const box=p.querySelector('.panel')||p;box.appendChild(b);setInterval(()=>{b.hidden=!isAdmin()},1000)})();
+
+const ADMC=()=>isAdmin()&&!!mode&&P?ADM.cheats:null;
+stepFx=(o=>function(dt){o.apply(this,arguments);const C=ADMC();if(!C)return;try{
+  if(C.speed&&P.alive&&!paused()){P.x+=(P.vx||0)*dt*.65;P.z+=(P.vz||0)*dt*.65;collide(P)}
+  if(C.jump){if(P.vy>JUMP*.8&&!P._sj){P.vy*=1.8;P._sj=true}else if(P.ground||P.vy<=0)P._sj=false}
+  if(C.norecoil){P.kickP=0;P.kickY=0;P.rampT=0}
+  if(C.rapid&&P.fireCd>.05)P.fireCd=.05;
+  if(C.abil&&P.ab){const c=CHARS[P.char];P.ab.c=c.c.max;P.ab.q=c.q.max;P.ab.e=0;P.ult=c.x.cost}
+  if(C.fastplant){if(P.plantT>0)P.plantT=Math.max(P.plantT,PLANT_T-.05);if(P.defuseT>0)P.defuseT=Math.max(P.defuseT,DEFUSE_T-.05)}}catch(e){}})(stepFx);
+damage=(o=>function(t,amount,att){const C=ADMC();if(C&&C.god&&t===P)return;return o.apply(this,arguments)})(damage);
+hostilesOf=(o=>function(a){const L=o.apply(this,arguments);const C=ADMC();if(C&&C.ghost&&a&&a!==P&&(a.isBot||a.sim))return L.filter(x=>x!==P);return L})(hostilesOf);
+botUpdate=(o=>function(b,dt){const C=ADMC();if(C&&C.freeze){b.vx=b.vz=0;return}return o.apply(this,arguments)})(botUpdate);
+
+renderAdmin=(o=>function(){o.apply(this,arguments);const p=$('admPanel');if(!p||p.hidden||ADM.tab!=='match')return;
+  const sec=t=>p.appendChild(mk('p','socSec',t));const row=(...els)=>{const d=mk('div','admRow');d.append(...els);p.appendChild(d);return d};
+  const btn=(l,fn,cls='mini')=>{const b=mk('button',cls,l);b.onclick=()=>{try{fn()}catch(e){console.warn(e)}renderAdmin()};return b};
+  const online=mode==='odm'||mode==='otdm';
+  sec('More instant actions');
+  row(btn('Respawn now',()=>{if(!P)return;if(online&&mp){if(!P.alive)mp.respawn=0;else spawnMP()}else if(mode==='dm'&&typeof respawnDM==='function')respawnDM(P);else{P.alive=true;P.hp=100;P.shield=50}}),
+    btn('Kill all enemies (any mode)',()=>{if(!P)return;const L=online&&mp?[...mp.remotes.values()]:agents;for(const a of L)if(a!==P&&a.alive&&!(mode!=='dm'&&mode!=='odm'&&a.team===P.team)){if(a.remote)damage(a,999,P,'head','Admin');else kill(a,P,true,'Admin')}}));
+  if(mode==='std')row(btn('Skip buy phase',()=>{if(game.phase==='buy')game.t=0}),btn('Win this round',()=>{if(game.phase!=='end')endRound(P.team,'Admin win')}),btn('Lose this round',()=>{if(game.phase!=='end')endRound(1-P.team,'Admin loss')}));
+  if(mode&&SITES.length)row(...SITES.map(s=>btn('Teleport to '+s.n+' site',()=>{P.x=s.plant?s.plant.x:s.x+s.w/2;P.z=s.plant?s.plant.z:s.y+s.h/2;P.y=0;P.vy=0})));
+  if(mode&&P){sec('Give yourself a gun');const r=row();r.style.flexWrap='wrap';for(const k in GUNS){const g=GUNS[k];if(g.melee)continue;r.appendChild(btn(g.name,()=>{giveGun(P,k);const w=cur(P);if(w)w.ammo=g.mag;try{buildVM(cur(P).gun,CHARS[P.char].hex)}catch(e){}},'mini ghostish'))}}
+  if(!mode)p.appendChild(mk('p','note','Start any match to use these. In a match, press F2 to open or close this panel.'))})(renderAdmin);
+
+/* ---------- abilities that silently did nothing ----------
+   - Tripwire (Warden): out in the open it now strings a shorter free-standing wire instead of refusing to place.
+   - Any ability that can't be used right now says why instead of doing nothing. */
+placeTrip=(o=>function(p){const r=o.apply(this,arguments);if(r!==false)return r;
+  const _w=wallT;try{wallT=function(x,z,dx,dz,L){return Math.min(150,_w.apply(this,arguments))};return o.apply(this,arguments)}finally{wallT=_w}})(placeTrip);
+useAb=(o=>function(slot){if(!P||!P.alive)return o.apply(this,arguments);const c=CHARS[P.char];const before=JSON.stringify(P.ab)+'|'+P.ult;let ret;const ab0=ability;
+  ability=function(p,k){const r=ab0.apply(this,arguments);if(p===P)ret=r;return r};try{o.apply(this,arguments)}finally{ability=ab0}
+  if(ret===false&&!(mode==='std'&&game.phase==='buy')){const k=P.char+'.'+slot;const why=k==='bastion.c'||k==='seraph.e'?'Nobody needs healing':k==='umbra.e'||k==='mire.e'?'No room to move that way':k==='warden.c'?'Too tight to place a tripwire here':'Can\'t use that right now';banner('',why,'',1.1);try{beep(220,.12,.04,'square')}catch(e){}}
+  else if(ret===undefined&&slot!=='x'&&before===JSON.stringify(P.ab)+'|'+P.ult){const need=slot==='e'?P.ab.e>0:slot==='q'?!(P.ab.q>0):!(P.ab.c>0);if(need)banner('',slot==='e'?`On cooldown · ${Math.ceil(P.ab.e)}s`:'No charges left · buy more in the shop','',1)}
+  else if(slot==='x'&&P.ult<c.x.cost&&ret===undefined&&before===JSON.stringify(P.ab)+'|'+P.ult)banner('',`Ultimate not ready · ${P.ult}/${c.x.cost} points`,'',1)})(useAb);
 
 window.__bootOK=1;
 })();
