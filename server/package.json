@@ -1,0 +1,10 @@
+{
+  "name": "chaos-anchor-server",
+  "version": "1.0.0",
+  "description": "Game server for the Chaos Anchor desktop app: online players, friends, parties, queue and match relay",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "8.18.0" },
+  "license": "UNLICENSED"
+}
