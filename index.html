@@ -8244,7 +8244,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'65',t:'28 Oct 2026, 9:28 PM'};
+const GAME_VERSION={n:'66',t:'29 Oct 2026, 7:11 PM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
@@ -8588,6 +8588,103 @@ mpStandings=function(){if(!mp)return[];const me=myPeer(mp.R)||'me';const rows=ne
   if(mp.host){for(const b of mp.bots.values())add(b.db)}else for(const id of mp.btIds){const e=mp.btLast.get(id);if(e)add(e.db)}add(mp.btx);
   return[...rows.values()].sort((a,b)=>b.k-a.k||a.d-b.d)};
 /*@@TESTHOOK@@*/
+
+/* ================= Ghostly restyle + daily spin + codes =================
+   - Ghostly weapons: glowing violet spectral body, dark wrapped bandage bands, pink spirit flames licking off the sides,
+     sparkles and pink wisps. Kill effect turns pink/violet too.
+   - Store → Rewards: a free daily spin (Shards or a random skin) and a box to redeem codes. */
+
+/* ---------- Ghostly look ---------- */
+const GH_A=0x7a34d0,GH_B=0xe4b0ff,GH_G=0xff4fd8;
+for(const c of HW_EXTRA)if(c.id==='ghost'){c.pat=25;c.a=GH_A;c.b=GH_B;c.g=GH_G}
+for(const id in SKINS)if(id.startsWith('ghost_')){Object.assign(SKINS[id],{pat:25,a:GH_A,b:GH_B,g:GH_G})}
+KFX.ghost={c:[0xff4fd8,0xb36bff,0xffffff],n:34,up:1.3,label:'spirit flames'};
+ROUGH[25]=[.18,.05,1];
+const GHOST_GLSL=`if(id==25){/* Ghostly: violet spirit glow, dark bandage wraps, pink wisps */
+    float n=sf3(p*6.+vec3(0.,uST*.3,uST*.12));float n2=sf3(p*20.-vec3(0.,uST*.7,0.));
+    vec3 V=min(uSA,uSB),Lc=max(uSA,uSB);vec3 c=mix(V*.75,Lc,.04+.3*n*n);
+    float zone=smoothstep(.13,.11,abs(fract(p.z*2.4+.2)-.5));
+    float s=fract(p.z*30.+p.y*16.);float strip=smoothstep(.02,.1,s)*smoothstep(.98,.9,s);
+    vec3 band=vec3(.16,.09,.24)*(.75+.5*n2)*(.55+.45*strip);
+    float wisp=smoothstep(.42,0.,abs(fract(p.y*4.5+n*2.8-uST*.35)-.5));
+    float spark=step(.993,sh3(floor(p*140.+vec3(0.,uST*.8,0.))));
+    c=mix(c,band,zone);
+    E=(V*(.45+.55*n)*.9+uSG*wisp*1.1+vec3(1.)*spark*3.)*(1.-zone*.9)*(.8+.2*sin(uST*2.5+p.z*12.));
+    return vec4(c,0.);}
+  `;
+skinMaterial=(o=>function(base,skin,role){const m=o.apply(this,arguments);if(skin&&skin.pat===25&&m&&m.onBeforeCompile&&role!=='glow'){const ob=m.onBeforeCompile;
+    m.onBeforeCompile=sh=>{ob(sh);sh.fragmentShader=sh.fragmentShader.replace('if(id==21){',GHOST_GLSL+'if(id==21){')};m.customProgramCacheKey=()=>'skin2g|25'+role;m.clearcoat=.35;m.envMapIntensity=.55;m.roughness=.4}return m})(skinMaterial);
+
+let GH_FLAME=null;
+function ghFlameTex(){if(GH_FLAME)return GH_FLAME;GH_FLAME=canvasTex(64,(t,s)=>{t.clearRect(0,0,s,s);
+    for(let k=0;k<3;k++){const cx=s*(.32+k*.18),w=s*(.16-k*.03);t.beginPath();t.moveTo(cx-w,s*.95);t.quadraticCurveTo(cx-w*1.2,s*.5,cx+w*.4,s*(.08+k*.12));t.quadraticCurveTo(cx+w*.2,s*.55,cx+w,s*.95);t.closePath();
+      const g=t.createLinearGradient(0,s,0,0);g.addColorStop(0,'rgba(255,255,255,.95)');g.addColorStop(.5,'rgba(255,255,255,.6)');g.addColorStop(1,'rgba(255,255,255,0)');t.fillStyle=g;t.fill()}},64);
+  GH_FLAME.wrapS=GH_FLAME.wrapT=THREE.ClampToEdgeWrapping;return GH_FLAME}
+function buildGhostKit(meta,mats,key){const tip=new THREE.Vector3().fromArray(meta.tip||[0,.012,-.6]);const L=Math.max(.22,-tip.z+.18);const pist=['pistol','revolver'].includes(GUNS[key]&&GUNS[key].vm?GUNS[key].vm.t:'');const s=pist?.65:1;
+  const g=new THREE.Group(),anim={swing:[],spin:[],orbs:[],pulse:[],blink:[],rise:[]};const by=tip.y,z0=tip.z,Z=f=>z0+L*f;
+  const M=(geo,m,x=0,y=0,z=0,rx=0,ry=0,rz=0)=>{const o=new THREE.Mesh(wcol(geo),m);o.position.set(x,y,z);o.rotation.set(rx,ry,rz);g.add(o);return o};
+  const fm=(c,k)=>new THREE.MeshBasicMaterial({map:ghFlameTex(),color:new THREE.Color(c).multiplyScalar(k),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
+  // spirit flames curling up off both sides
+  for(const sx of[-1,1])for(const [f,sz,c] of[[.3,.1,GH_G],[.55,.13,0xb36bff],[.8,.09,GH_G]]){const holder=new THREE.Group();holder.position.set(sx*.026*s,by-.006,Z(f));g.add(holder);
+    const fl=new THREE.Mesh(wcol(new THREE.PlaneGeometry(sz*s,sz*1.3*s)),fm(c,1.25));fl.position.y=sz*.55*s;fl.rotation.y=Math.PI/2;holder.add(fl);
+    anim.swing.push({o:holder,ax:'z',sp:3+Math.random()*2,amp:.25,base:-sx*.35});anim.pulse.push(fl)}
+  // a soft glow behind the muzzle
+  M(new THREE.SphereGeometry(.014*s,12,10),new THREE.MeshBasicMaterial({color:new THREE.Color(GH_G).multiplyScalar(1.6),transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}),0,by,z0+.01);
+  // four-point sparkles that blink
+  for(const sx of[-1,1]){const st=new THREE.Group();st.position.set(sx*.032*s,by+.02*s,Z(.45+sx*.12));g.add(st);
+    for(const r of[0,Math.PI/2]){const b=new THREE.Mesh(wcol(new THREE.BoxGeometry(.0015,.02*s,.0015)),new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false}));b.rotation.x=r;st.add(b);anim.blink.push({o:b,c:0xffffff,ph:sx})}anim.spin.push({o:st,ax:'x',sp:.5*sx})}
+  // pink wisps drifting up
+  for(let i=0;i<10;i++){const m=M(new THREE.SphereGeometry(.0024,6,5),new THREE.MeshBasicMaterial({color:new THREE.Color(i%2?GH_G:0xd9a0ff).multiplyScalar(2.4),toneMapped:false}));
+    anim.rise.push({o:m,x:(Math.random()-.5)*.05,z:Z(.15+Math.random()*.75),y0:by-.01,h:.1,sp:.3+Math.random()*.35,ph:Math.random()})}
+  g.traverse(n=>{if(n.isMesh){n.castShadow=false;n.renderOrder=2}});g.userData.anim2=anim;return g}
+buildSkinKit=(o=>function(id,meta,mats,key){if(id==='ghost')return buildGhostKit(meta,mats,key);return o.apply(this,arguments)})(buildSkinKit);
+(()=>{const st=document.createElement('style');st.textContent='.ghostCard{border-top-color:#ff4fd8!important;background:linear-gradient(160deg,rgba(70,30,110,.94),rgba(22,12,34,.94))!important}';document.head.appendChild(st)})();
+
+/* ---------- Rewards: daily spin + codes ---------- */
+const DAY=()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()};
+const WHEEL=[{l:'100',v:100,w:22,c:'#3b4a6b'},{l:'150',v:150,w:20,c:'#5a3b7a'},{l:'250',v:250,w:16,c:'#2f6b6b'},{l:'100',v:100,w:22,c:'#6b3b4a'},
+  {l:'400',v:400,w:9,c:'#7a5a2a'},{l:'Skin',v:'skin',w:5,c:'#a0307a'},{l:'200',v:200,w:18,c:'#3b5a7a'},{l:'1000',v:1000,w:2,c:'#b8902a'}];
+const CODES={SPOOKY:{s:500,t:'Spooky season'},GHOSTLY:{s:300,t:'Ghostly greetings'},CHAOS:{s:250,t:'Welcome to Chaos Anchor'},FIVEVFIVE:{s:400,t:'Always 5v5'}};
+function wheelSkin(){const pool=Object.values(SKINS).filter(k=>['Select','Deluxe','Premium'].includes(k.tier)&&!ACC.skins.includes(k.id)&&!k.src);return pool.length?pick(pool):null}
+function giveShards(n){ACC.shards=(ACC.shards||0)+n;saveProg();try{navAccount()}catch(e){}}
+function rewardsSection(){const box=mk('div','rwBox');
+  const card=mk('div','rwCard');card.append(mk('b',null,'Daily spin'),mk('p','note','One free spin every day. Win Shards or a random weapon skin.'));
+  const cv=document.createElement('canvas');cv.width=cv.height=260;cv.className='rwWheel';const wrap=mk('div','rwWrap');const ptr=mk('div','rwPtr');wrap.append(cv,ptr);card.appendChild(wrap);
+  const tot=WHEEL.reduce((a,b)=>a+b.w,0);const seg=Math.PI*2/WHEEL.length;let ang=0;
+  const draw=()=>{const t=cv.getContext('2d'),R=128;t.clearRect(0,0,260,260);t.save();t.translate(130,130);t.rotate(ang);
+    WHEEL.forEach((w,i)=>{t.beginPath();t.moveTo(0,0);t.arc(0,0,R,i*seg,(i+1)*seg);t.closePath();t.fillStyle=w.c;t.fill();t.strokeStyle='rgba(255,255,255,.35)';t.lineWidth=2;t.stroke();
+      t.save();t.rotate(i*seg+seg/2);t.fillStyle='#fff';t.font='800 17px system-ui,sans-serif';t.textAlign='right';t.textBaseline='middle';t.fillText(w.l,R-14,0);t.restore()});
+    t.beginPath();t.arc(0,0,20,0,Math.PI*2);t.fillStyle='#111';t.fill();t.restore()};draw();
+  const done=ACC.daily===DAY();const btn=mk('button','btn',done?'Come back tomorrow':'Spin');btn.disabled=done;const res=mk('p','rwRes',done&&ACC.dailyWon?'Today: '+ACC.dailyWon:'');
+  btn.onclick=()=>{if(ACC.daily===DAY())return;btn.disabled=true;let r=Math.random()*tot,idx=0;for(;idx<WHEEL.length;idx++){r-=WHEEL[idx].w;if(r<=0)break}idx=Math.min(idx,WHEEL.length-1);
+    ACC.daily=DAY();saveProg();try{initAudio()}catch(e){}
+    // the pointer sits at the top (-90°): land the middle of the winning slice there
+    const target=-Math.PI/2-(idx*seg+seg/2)+(Math.random()-.5)*seg*.6;const start=ang,TAU2=Math.PI*2,end=start+TAU2*6+(((target-start)%TAU2)+TAU2)%TAU2;const t0=performance.now(),D=4200;let lastTick=0;
+    (function step(){const f=Math.min(1,(performance.now()-t0)/D),e=1-Math.pow(1-f,4);ang=start+(end-start)*e;draw();const k=Math.floor(ang/seg);if(k!==lastTick){lastTick=k;try{chime([880],.02,.03)}catch(e){}}
+      if(f<1)return requestAnimationFrame(step);const w=WHEEL[idx];let msg;
+      if(w.v==='skin'){const sk=wheelSkin();if(sk){ACC.skins.push(sk.id);saveProg();msg=sk.name}else{giveShards(600);msg='600 Shards'}}else{giveShards(w.v);msg=w.v+' Shards'}
+      ACC.dailyWon=msg;saveProg();res.textContent='You won: '+msg;btn.textContent='Come back tomorrow';try{chime([523,659,784,1046],.09,.06)}catch(e){}banner('Daily spin',msg,'win',2)})()};
+  card.append(btn,res);
+  const cc=mk('div','rwCard');cc.append(mk('b',null,'Redeem a code'),mk('p','note','Codes are shared in updates and events. Each code works once per account.'));
+  const row=mk('div','rwRow');const inp=document.createElement('input');inp.placeholder='Enter code';inp.maxLength=24;inp.className='rwIn';const go=mk('button','btn','Redeem');const out=mk('p','rwRes','');row.append(inp,go);cc.append(row,out);
+  go.onclick=()=>{const k=(inp.value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');ACC.redeemed=ACC.redeemed||[];const c=CODES[k];
+    if(!c){out.textContent='That code doesn\'t exist.';return}if(ACC.redeemed.includes(k)){out.textContent='You already used that code.';return}
+    ACC.redeemed.push(k);giveShards(c.s);out.textContent=`${c.t}! +${c.s} Shards`;inp.value='';try{chime([659,880,1175],.08,.05)}catch(e){}};
+  inp.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')go.click()};
+  box.append(card,cc);return box}
+(()=>{const st=document.createElement('style');st.textContent=`.rwBox{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}.rwCard{flex:1 1 300px;background:rgba(15,20,30,.85);border-top:3px solid var(--red);padding:16px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.rwCard b{font:800 20px var(--ui);letter-spacing:.06em;text-transform:uppercase}.rwWrap{position:relative;align-self:center;width:260px;max-width:100%}.rwWheel{width:100%;height:auto;display:block;border-radius:50%;box-shadow:0 0 30px rgba(255,79,216,.25)}
+.rwPtr{position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-top:22px solid #fff;filter:drop-shadow(0 2px 3px #000)}
+.rwRow{display:flex;gap:8px;width:100%}.rwIn{flex:1;min-width:0;background:#0b0f18;border:1px solid rgba(255,255,255,.2);color:#fff;padding:8px 10px;font:600 15px var(--ui);text-transform:uppercase;letter-spacing:.1em}.rwRes{margin:0;font-weight:700;color:#9fe2ff}
+.rwDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4fd8;margin-left:6px;vertical-align:middle}`;document.head.appendChild(st)})();
+renderStore=(o=>function(){const rw=storeTab==='rewards';if(rw)storeTab='cases';o.apply(this,arguments);if(rw)storeTab='rewards';
+  try{const st=$('tab-store');const tabs=st.querySelector('.subtabs');if(!tabs)return;const b=mk('button','ghost','Rewards');if(ACC.daily!==DAY())b.appendChild(mk('span','rwDot'));b.style.borderColor=rw?'var(--text)':'';
+    b.onclick=()=>{storeTab='rewards';renderStore()};tabs.insertBefore(b,tabs.firstChild);
+    if(rw){for(const x of tabs.querySelectorAll('button'))if(x!==b)x.style.borderColor='';while(tabs.nextSibling)tabs.nextSibling.remove();st.appendChild(rewardsSection())}}catch(e){console.warn('rewards',e)}})(renderStore);
+// Ghostly knife: the blade glows violet too instead of plain steel
+dressWeapon=(o=>function(pv,key,skin,host){const r=o.apply(this,arguments);try{if(pv&&skin&&skin.pat===25&&key==='knife'){const cache=new Map();
+  pv.traverse(n=>{if(!n.isMesh||!n.material||Array.isArray(n.material))return;const ud=n.material.userData||{};if(ud.grp!==1||n.material.customProgramCacheKey&&String(n.material.customProgramCacheKey()).startsWith('skin2'))return;
+    const k=n.material.uuid;if(!cache.has(k))cache.set(k,skinMaterial(n.material,skin,'base'));n.material=cache.get(k)})}}catch(e){console.warn('ghost knife',e)}return r})(dressWeapon);
 
 window.__bootOK=1;
 })();
