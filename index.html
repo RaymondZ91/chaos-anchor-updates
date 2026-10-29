@@ -3617,7 +3617,7 @@ const tileAt=(x,z)=>{const c=Math.floor(x/TILE),r=Math.floor(z/TILE);return(r<0|
 const RAISED=((MD?MD.struct:SALT_STRUCT)||{boxes:[]}).boxes.filter(b=>b[5]>=100&&(b[6]==='plat'||b[6]==='walk'||b[6]==='bridge'));
 function blockHt(x,y,w,h,edge,small){const v=(x*7+y*13)%4,X=x*TILE,Z=y*TILE,Wd=w*TILE,Hd=h*TILE;let top=0;
   for(const b of RAISED){const dx=Math.max(b[0]-(X+Wd),X-(b[0]+b[2]),0),dz=Math.max(b[1]-(Z+Hd),Z-(b[1]+b[3]),0);if(Math.hypot(dx,dz)<TILE*7)top=Math.max(top,b[5])}
-  const lg=GMUL<1?70:0;let ht=edge?300:small?150:Math.min(w,h)<=1?200+v*16:236+v*28;if(!edge&&!small&&top)ht=Math.max(ht,top+150);return ht+(small?0:lg)}
+  const lg=GMUL<1?70:0;let ht=edge?240:small?140:Math.min(w,h)<=1?170+v*10:200+v*14;if(!edge&&!small&&top)ht=Math.max(ht,top+110);return ht+(small?0:lg)}
 const BLOCKS=(()=>{const used=GRID.map(r=>[...r].map(()=>false)),out=[];
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){if(GRID[y][x]!=='#'||used[y][x])continue;let w=0;while(x+w<COLS&&GRID[y][x+w]==='#'&&!used[y][x+w])w++;let h=1;
     outer:while(y+h<ROWS){for(let i=0;i<w;i++)if(GRID[y+h][x+i]!=='#'||used[y+h][x+i])break outer;h++}
@@ -3629,11 +3629,11 @@ const HOUSES=(()=>{const out=[],T=TILE;let s=7;for(const ch of MAPID)s=(s*131+ch
   const near=(c0,r0,c1,r1,chs,pad)=>{for(let r=r0-pad;r<=r1+pad;r++)for(let c=c0-pad;c<=c1+pad;c++)if(r>=0&&c>=0&&r<ROWS&&c<COLS&&chs.includes(GRID[r][c]))return true;return false};
   const walk=(c,r)=>r>=0&&c>=0&&r<ROWS&&c<COLS&&!'#vh'.includes(GRID[r][c]);
   for(let i=BLOCKS.length-1;i>=0;i--){const b=BLOCKS[i];if(b.edge||b.kind==='pillar')continue;const c0=b.x/T,r0=b.y/T,c1=c0+b.w/T-1,r1=r0+b.h/T-1,tw=c1-c0+1,th=r1-r0+1;
-    if(tw<2||th<2||tw*T<320||th*T<320||tw*th>40||Math.max(tw,th)>9||near(c0,r0,c1,r1,'ad',2)||R()<.1)continue;
+    if(tw<2||th<2||tw*th<6||tw*th>96||Math.max(tw,th)>16||near(c0,r0,c1,r1,'ad',2))continue;
     const doors=[];for(const sd of['N','S','W','E']){const L=[];if(sd==='N')for(let c=c0;c<=c1;c++)L.push(walk(c,r0-1));if(sd==='S')for(let c=c0;c<=c1;c++)L.push(walk(c,r1+1));if(sd==='W')for(let r=r0;r<=r1;r++)L.push(walk(c0-1,r));if(sd==='E')for(let r=r0;r<=r1;r++)L.push(walk(c1+1,r));
       const idx=L.map((v,k)=>v?k:-1).filter(k=>k>=0);if(idx.length)doors.push([sd,idx[Math.floor(idx.length/2)]])}
     if(!doors.length)continue;doors.sort(()=>R()-.5);
-    out.push({x:b.x,y:b.y,w:b.w,h:b.h,ht:ROOF_H,gaps:[],doors:doors.slice(0,2),seed:b.seed,flip:R()<.5});BLOCKS.splice(i,1);
+    const big=tw*th>=12;out.push({x:b.x,y:b.y,w:b.w,h:b.h,ht:big?280:240,single:true,type:big?'warehouse':'hall',gaps:[],doors:doors.slice(0,big?3:2),seed:b.seed,flip:R()<.5});BLOCKS.splice(i,1);
     for(let r=r0;r<=r1;r++)GRID[r]=GRID[r].slice(0,c0)+'h'.repeat(tw)+GRID[r].slice(c1+1)}
   return out})();
 const PROPS=MD?MD.props.map(([kind,x,y,w,h,ht])=>({kind,x,y,w,h,ht})):[['box',300,460,90,90],['crate',640,470,60,60],['crate',420,860,60,60],['barrel',880,620,44,44],['cont',205,720,60,150],
@@ -3724,7 +3724,7 @@ const inBox=(b,x,z,r)=>x>b.x-r&&x<b.x+b.w+r&&z>b.y-r&&z<b.y+b.h+r;
 function rectMinus(x0,z0,x1,z1,hx0,hz0,hx1,hz1){const o=[];hx0=Math.max(hx0,x0);hz0=Math.max(hz0,z0);hx1=Math.min(hx1,x1);hz1=Math.min(hz1,z1);if(hx0>=hx1||hz0>=hz1)return[[x0,z0,x1,z1]];
   if(hz0>z0)o.push([x0,z0,x1,hz0]);if(hz1<z1)o.push([x0,hz1,x1,z1]);if(hx0>x0)o.push([x0,hz0,hx0,hz1]);if(hx1<x1)o.push([hx1,hz0,x1,hz1]);return o}
 function houseBoxes(h){const out=[],t=16,H=h.ht,F=216,T=TILE,x0=h.x,z0=h.y,x1=h.x+h.w,z1=h.y+h.h;const add=(x,z,w,d,y0,y1,k)=>{if(w>1&&d>1&&y1>y0)out.push({x,y:z,w,h:d,y0,y1,k,house:h})};
-  const bands=[[0,40,'d'],[40,122,'dw'],[122,160,'d'],[160,240,''],[240,312,''],[312,H,'']];
+  const bands=h.single?[[0,40,'d'],[40,122,h.type==='lab'?'d':'dw'],[122,160,'d'],[160,H,'']]:[[0,40,'d'],[40,122,'dw'],[122,160,'d'],[160,240,''],[240,312,''],[312,H,'']];
   for(const sd of['N','S','W','E']){const horiz=sd==='N'||sd==='S';const a0=horiz?x0:z0+t,a1=horiz?x1:z1-t;const fixed=sd==='N'?z0:sd==='S'?z1-t:sd==='W'?x0:x1-t;
     const doorC=h.doors.filter(d=>d[0]===sd).map(d=>(horiz?x0:z0)+(d[1]+.5)*T);const wins=[];for(let a=a0+75;a<a1-60;a+=150){if(!doorC.some(dc=>Math.abs(dc-a)<115))wins.push(a)}
     const seg=(a,b,y0,y1)=>{if(horiz)add(a,fixed,b-a,t,y0,y1,'hw');else add(fixed,a,t,b-a,y0,y1,'hw')};
@@ -3732,12 +3732,12 @@ function houseBoxes(h){const out=[],t=16,H=h.ht,F=216,T=TILE,x0=h.x,z0=h.y,x1=h.
       let cur=a0;for(const[g0,g1]of gaps){if(g0>cur)seg(cur,g0,y0,y1);cur=Math.max(cur,g1)}if(cur<a1)seg(cur,a1,y0,y1)}}
   const ix0=x0+t,iz0=z0+t,ix1=x1-t,iz1=z1-t,alongX=(ix1-ix0)>=(iz1-iz0);const n=9,Ls=Math.min((alongX?ix1-ix0:iz1-iz0)-90,330),st=Ls/n,sw=74;let hole;
   // stairs hug one long wall (side picked per house), climbing to the upper floor
-  if(alongX){const zs=h.flip?iz1-sw:iz0,xs=ix0+30;for(let i=0;i<n;i++)add(xs+i*st,zs,Ls-i*st,sw,0,Math.round(F*(i+1)/n),'hstep');hole=[xs-6,zs-(h.flip?10:0),xs+Ls+14,zs+sw+(h.flip?0:10)]}
+  if(h.single)hole=[-9e9,-9e9,-9e9+1,-9e9+1];else if(alongX){const zs=h.flip?iz1-sw:iz0,xs=ix0+30;for(let i=0;i<n;i++)add(xs+i*st,zs,Ls-i*st,sw,0,Math.round(F*(i+1)/n),'hstep');hole=[xs-6,zs-(h.flip?10:0),xs+Ls+14,zs+sw+(h.flip?0:10)]}
   else{const xs=h.flip?ix1-sw:ix0,zs=iz0+30;for(let i=0;i<n;i++)add(xs,zs+i*st,sw,Ls-i*st,0,Math.round(F*(i+1)/n),'hstep');hole=[xs-(h.flip?10:0),zs-6,xs+sw+(h.flip?0:10),zs+Ls+14]}
-  for(const[a,b,c,d]of rectMinus(ix0,iz0,ix1,iz1,...hole))add(a,b,c-a,d-b,F-16,F,'hfloor');
+  if(!h.single)for(const[a,b,c,d]of rectMinus(ix0,iz0,ix1,iz1,...hole))add(a,b,c-a,d-b,F-16,F,'hfloor');
   // ladder in the far corner from the stairs, up through a hatch onto the roof
   const lx=alongX?ix1-46:(h.flip?ix0+46:ix1-46),lz=alongX?(h.flip?iz0+46:iz1-46):iz1-46,nx=alongX?-1:(h.flip?1:-1),nz=0;const cx=lx+nx*16,cz=lz;
-  for(const[a,b,c,d]of rectMinus(x0,z0,x1,z1,cx-38,cz-38,cx+38,cz+38))add(a,b,c-a,d-b,H-16,H,'hroof');
+  if(h.single)add(x0,z0,x1-x0,z1-z0,H-16,H,'hroof');else for(const[a,b,c,d]of rectMinus(x0,z0,x1,z1,cx-38,cz-38,cx+38,cz+38))add(a,b,c-a,d-b,H-16,H,'hroof');
   // parapets, with an opening wherever a rooftop bridge lands
   for(const[sd,a0,a1,fixed,horiz]of[['N',x0,x1,z0,true],['S',x0,x1,z1-8,true],['W',z0+8,z1-8,x0,false],['E',z0+8,z1-8,x1-8,false]]){const gs=h.gaps.filter(g=>g[0]===sd).map(g=>[g[1]-64,g[1]+64]).sort((p,q)=>p[0]-q[0]);let cur=a0;
     const seg=(a,b)=>{if(b-a<4)return;if(horiz)add(a,fixed,b-a,8,H,H+30,'hpara');else add(fixed,a,8,b-a,H,H+30,'hpara')};for(const[g0,g1]of gs){seg(cur,g0);cur=Math.max(cur,g1)}seg(cur,a1)}
@@ -3749,7 +3749,7 @@ function houseBoxes(h){const out=[],t=16,H=h.ht,F=216,T=TILE,x0=h.x,z0=h.y,x1=h.
   const placed=[];const fits=(px,pz,w,d,fl)=>{if(px<ix0+2||pz<iz0+2||px+w>ix1-2||pz+d>iz1-2)return false;for(const k of(fl?keepOut.slice(0,2):keepOut))if(px<k[2]&&px+w>k[0]&&pz<k[3]&&pz+d>k[1])return false;
     for(const q of placed)if(q.fl===fl&&px<q.x+q.w+30&&px+w>q.x-30&&pz<q.y+q.h+30&&pz+d>q.y-30)return false;return true};
   const KIT=[['shelf',36,110,120],['sofa',150,62,46],['cabinet',70,40,92],['crates',70,70,64],['table',96,64,44],['desk',110,56,48],['bed',96,180,34],['wardrobe',60,110,150],['plant',36,36,70],['tv',24,96,60]];
-  for(const fl of[0,1]){const y=fl?F:0,n=fl?4:5;const pool=fl?['bed','wardrobe','desk','shelf','plant','crates']:['sofa','table','shelf','cabinet','crates','tv','plant'];
+  for(const fl of(h.single?[0]:[0,1])){const y=fl?F:0,n=fl?4:(h.type==='warehouse'?8:5);const pool=h.type==='warehouse'?['crates','crates','shelf','shelf','cabinet','crates']:h.type==='lab'?['desk','desk','cabinet','shelf','plant','table']:fl?['bed','wardrobe','desk','shelf','plant','crates']:['sofa','table','shelf','cabinet','crates','tv','plant'];
     for(let k=0,tries=0;k<n&&tries<60;tries++){const name=pool[Math.floor(R()*pool.length)];const def=KIT.find(q=>q[0]===name);let w=def[1],d=def[2];const side=Math.floor(R()*4);if(side<2){const t=w;w=d;d=t}
       let px,pz;if(name==='table'){px=ix0+(ix1-ix0)*(.3+R()*.4)-w/2;pz=iz0+(iz1-iz0)*(.3+R()*.4)-d/2}
       else if(side===0){px=ix0+4;pz=iz0+R()*(iz1-iz0-d)}else if(side===1){px=ix1-w-4;pz=iz0+R()*(iz1-iz0-d)}else if(side===2){pz=iz0+4;px=ix0+R()*(ix1-ix0-w)}else{pz=iz1-d-4;px=ix0+R()*(ix1-ix0-w)}
@@ -3762,6 +3762,29 @@ function houseBoxes(h){const out=[],t=16,H=h.ht,F=216,T=TILE,x0=h.x,z0=h.y,x1=h.
     const gx=B.x-(A.x+A.w),oz0=Math.max(A.y,B.y),oz1=Math.min(A.y+A.h,B.y+B.h);if(gx>0&&gx<=340&&oz1-oz0>=160){const zc=(oz0+oz1)/2,r={x:A.x+A.w-8,y:zc-56,w:gx+16,h:112};if(!blocked(r)){BOX3.push({x:r.x,y:r.y,w:r.w,h:r.h,y0:ROOF_H-16,y1:ROOF_H,k:'bridge'});A.gaps.push(['E',zc]);B.gaps.push(['W',zc]);n++}}
     const gz=B.y-(A.y+A.h),ox0=Math.max(A.x,B.x),ox1=Math.min(A.x+A.w,B.x+B.w);if(gz>0&&gz<=340&&ox1-ox0>=160){const xc=(ox0+ox1)/2,r={x:xc-56,y:A.y+A.h-8,w:112,h:gz+16};if(!blocked(r)){BOX3.push({x:r.x,y:r.y,w:r.w,h:r.h,y0:ROOF_H-16,y1:ROOF_H,k:'bridge'});A.gaps.push(['S',xc]);B.gaps.push(['N',xc]);n++}}}})();
 for(const h of HOUSES){const bs=houseBoxes(h);h.boxes=bs;for(const b of bs)BOX3.push(b)}
+/* ---------- research labs with teleporter rooms (like Bind): two labs far apart; each has a small enclosed teleporter room
+   against its back wall. Walk into the portal in one lab's room and you come out beside the other lab's room (one way each). ---------- */
+const TP_OLD=MD?(MD.feat||[]).filter(f=>f.t==='tp').map(f=>({a:f.a.slice(),b:f.b.slice()})):[{a:[2.6*TILE,15.5*TILE],b:[29.4*TILE,15.5*TILE]}];
+let LABS_OK=false;const LABS=[];
+const labSide=h=>{const ds=new Set(h.doors.map(d=>d[0]));const t=16,iw=h.w-2*t,ih=h.h-2*t;const c=[['N',iw,ih],['S',iw,ih],['W',ih,iw],['E',ih,iw]].filter(([sd,al,pp])=>!ds.has(sd)&&al-30>=130&&pp>=130+110).sort((p,q)=>q[1]-p[1]);return c.length?c[0]:null};
+(function(){const HL=HOUSES.filter(h=>labSide(h));if(HL.length<2)return;let best=null,bd=0;for(let i=0;i<HL.length;i++)for(let j=i+1;j<HL.length;j++){const A=HL[i],B=HL[j];const d=Math.hypot(A.x+A.w/2-B.x-B.w/2,A.y+A.h/2-B.y-B.h/2);if(d>bd){bd=d;best=[A,B]}}
+  if(!best||bd<W*.3)return;const made=[];
+  for(const h of best){const T=TILE,x0=h.x,z0=h.y,x1=h.x+h.w,z1=h.y+h.h,t=16,cx=(x0+x1)/2,cz=(z0+z1)/2;const ds=new Set(h.doors.map(d=>d[0]));
+    // the back wall: the longest side with no door
+    const ls=labSide(h);if(!ls)return;const sd=ls[0];
+    const nx=sd==='W'?1:sd==='E'?-1:0,nz=sd==='N'?1:sd==='S'?-1:0;// inward normal from the back wall
+    const bx=sd==='W'?x0+t:sd==='E'?x1-t:cx,bz=sd==='N'?z0+t:sd==='S'?z1-t:cz;const Dp=130,Wd=Math.min(170,ls[1]-30-2*t),HH=h.ht-16;const along=nz!==0;
+    const room={x0:along?bx-Wd/2-t:Math.min(bx,bx+nx*Dp),z0:along?Math.min(bz,bz+nz*Dp):bz-Wd/2-t,x1:along?bx+Wd/2+t:Math.max(bx,bx+nx*Dp),z1:along?Math.max(bz,bz+nz*Dp):bz+Wd/2+t};
+    const nb=[];const add=(x,z,w,d)=>{const b={x,y:z,w,h:d,y0:0,y1:HH,k:'hw',house:h,lab:true};nb.push(b)};
+    if(along){const zA=Math.min(bz,bz+nz*Dp),zB=Math.max(bz,bz+nz*Dp);add(bx-Wd/2-t,zA,t,zB-zA);add(bx+Wd/2,zA,t,zB-zA);const fz=nz>0?zB-t:zA;add(bx-Wd/2-t,fz,t+35,t);add(bx+Wd/2-35,fz,t+35,t)}
+    else{const xA=Math.min(bx,bx+nx*Dp),xB=Math.max(bx,bx+nx*Dp);add(xA,bz-Wd/2-t,xB-xA,t);add(xA,bz+Wd/2,xB-xA,t);const fx=nx>0?xB-t:xA;add(fx,bz-Wd/2-t,t,t+35);add(fx,bz+Wd/2-35,t,t+35)}
+    // clear furniture out of the teleporter room and the space in front of it
+    const pad=90,clr=b=>b.k==='furn'&&b.x<room.x1+pad&&b.x+b.w>room.x0-pad&&b.y<room.z1+pad&&b.y+b.h>room.z0-pad;h.boxes=h.boxes.filter(b=>!clr(b));for(let i=BOX3.length-1;i>=0;i--)if(BOX3[i].house===h&&clr(BOX3[i]))BOX3.splice(i,1);
+    for(const b of nb){h.boxes.push(b);BOX3.push(b)}
+    h.type='lab';h.lab={sd,nx,nz,room,Wd,Dp,portal:[bx+nx*46,bz+nz*46],exit:[bx+nx*(Dp+62),bz+nz*(Dp+62)],rot:Math.atan2(nx,nz)};made.push(h)}
+  if(made.length===2){LABS.push(...made);FEATURES.push({t:'portal',a:made[0].lab.portal,b:made[1].lab.exit,inside:true,rot:made[0].lab.rot,lab:true},{t:'portal',a:made[1].lab.portal,b:made[0].lab.exit,inside:true,rot:made[1].lab.rot,lab:true});LABS_OK=true}})();
+// maps too small for two labs keep their teleporters, now one way each and stepping out beside the other end
+if(!LABS_OK)for(const t of TP_OLD){const d=Math.hypot(t.b[0]-t.a[0],t.b[1]-t.a[1])||1,ux=(t.b[0]-t.a[0])/d,uz=(t.b[1]-t.a[1])/d;FEATURES.push({t:'portal',a:t.a,b:[t.b[0]-ux*90,t.b[1]-uz*90],inside:true},{t:'portal',a:t.b,b:[t.a[0]+ux*90,t.a[1]+uz*90],inside:true});LABS_OK=true}
 // more places to hide: crate stacks on every site and a crate at each main choke, always with room to walk around them.
 // Half-height crates (70) are cover you can peek over; tall stacks (130+) hide you completely.
 (()=>{const R=(()=>{let v=97531+W;return()=>{v=(v*16807)%2147483647;return v/2147483647}})();const placed=[];
@@ -3820,7 +3843,7 @@ function clearPath3(a,b){const ay=a.y||0,by=b.y!=null?b.y:ay;if(Math.abs(ay-by)>
 if(NAV.on){const fp0=findPath,cp0=clearPath;findPath=function(sx,sz,tx,tz,sy,ty){return findPath3(sx,sz,sy,tx,tz,ty)};clearPath=function(a,b){return clearPath3(a,b)}}
 
 /* ---------- high routes for every map: ziplines between rooftops/platforms, and a one-way portal across the map ---------- */
-for(let i=FEATURES.length-1;i>=0;i--)if(FEATURES[i].t==='zip')FEATURES.splice(i,1);
+for(let i=FEATURES.length-1;i>=0;i--)if(FEATURES[i].t==='zip'||FEATURES[i].t==='pad'||FEATURES[i].t==='tp')FEATURES.splice(i,1);// no jump pads; teleporters live in the research labs
 (function(){const tops=[];
   for(const b of BOX3)if((b.k==='plat'||b.k==='walk')&&b.w>=120&&b.h>=120&&b.y1>=120)tops.push({x0:b.x+30,z0:b.y+30,x1:b.x+b.w-30,z1:b.y+b.h-30,y:b.y1});
   const anchor=(t,tx,tz)=>{const cx=(t.x0+t.x1)/2,cz=(t.z0+t.z1)/2,dx=tx-cx,dz=tz-cz,d=Math.hypot(dx,dz)||1;let s=1e9;if(dx)s=Math.min(s,(dx>0?t.x1-cx:cx-t.x0)/Math.abs(dx/d));if(dz)s=Math.min(s,(dz>0?t.z1-cz:cz-t.z0)/Math.abs(dz/d));s=Math.max(0,s-10);return[cx+dx/d*s,cz+dz/d*s]};
@@ -3838,7 +3861,7 @@ for(let i=FEATURES.length-1;i>=0;i--)if(FEATURES[i].t==='zip')FEATURES.splice(i,
     for(const h of hs){if(avoid&&avoid.h===h)continue;if(avoid&&Math.hypot(h.x+h.w/2-avoid.p[0],h.y+h.h/2-avoid.p[1])<W*.3)continue;const cx=h.x+h.w/2,cz=h.y+h.h/2;let best=null,bd=1e9;
       for(const R of[48,40,34])for(let z=h.y+40;z<=h.y+h.h-40;z+=15)for(let x=h.x+40;x<=h.x+h.w-40;x+=15){if(best)break;let ok=true;for(const q of boxesNear(x,z))if(q.y0<100&&q.y1>2&&inBox(q,x,z,R)){ok=false;break}if(!ok)continue;const d=Math.hypot(x-cx,z-cz);if(d<bd){bd=d;best=[x,z]}}
       if(best)return{p:best,h}}return null};
-  let A=inHouse(W*.17,H*.62),B=A&&inHouse(W*.83,H*.4,A);
+  if(LABS_OK)return;let A=inHouse(W*.17,H*.62),B=A&&inHouse(W*.83,H*.4,A);
   if(A&&B&&Math.hypot(A.p[0]-B.p[0],A.p[1]-B.p[1])>W*.3)FEATURES.push({t:'portal',a:A.p,b:B.p,inside:true});
   else{const a=near(W*.17,H*.62),b=near(W*.83,H*.4);if(a&&b&&Math.hypot(a[0]-b[0],a[1]-b[1])>W*.45)FEATURES.push({t:'portal',a,b})}})();
 // the callout name for a spot on the map (used to label portals)
@@ -4655,7 +4678,7 @@ const bFree=(x,z)=>{const c=Math.floor(x/TILE),r=Math.floor(z/TILE);return r>=0&
 
 function bLot(x0,z0,w,d,baseH,edge,M,isPillar){const R=B_RND,st=M.st,cx=x0+w/2,cz=z0+d/2;
   // whole floors only, always at least as tall as the collision box; some buildings get an extra storey
-  const floors=Math.max(1,Math.ceil((baseH-BGH)/BFL))+(R()<(edge?.55:.35)?1:0)+(edge&&R()<.3?1:0);const H=BGH+floors*BFL;
+  const floors=Math.max(1,Math.ceil((baseH-BGH)/BFL))+(R()<(edge?.35:.12)?1:0);const H=BGH+floors*BFL;
   bBox(M.gr,w,BGH,d,cx,BGH/2,cz,BFL);const lit=M.lit&&R()<.55?M.lit:M.up;bBox(lit,w,H-BGH,d,cx,BGH+(H-BGH)/2,cz,BFL);
   bBox(M.trim,w+8,8,d+8,cx,BGH+4,cz);bBox(M.trim,w+4,18,d+4,cx,9,cz);// string course and plinth
   // what faces the street (only those get balconies, awnings and signs)
@@ -4703,6 +4726,32 @@ function buildBuildings(){if(EV_VARIANT==='eclipse')for(const s of B_STYLES.ruin
     for(const[o,s]of cuts){const k=pickStyle(prev);prev=k;const x0=along?b.x+o:b.x,z0=along?b.y:b.y+o,w=along?s:b.w,d=along?b.h:s;bLot(x0,z0,w,d,b.ht,b.edge,B_MATS[k])}}
   for(const j of JAGS){const k=(R()*B_MATS.length)|0;const M=B_MATS[k];const cx=j.x+j.w/2,cz=j.y+j.h/2;bBox(M.gr,j.w,Math.min(j.ht,BGH),j.h,cx,Math.min(j.ht,BGH)/2,cz,BFL);if(j.ht>BGH)bBox(M.up,j.w,j.ht-BGH,j.h,cx,BGH+(j.ht-BGH)/2,cz,BFL);bBox(M.trim,j.w+6,8,j.h+6,cx,j.ht+4,cz)}
   for(const[m,gs]of BB){if(!gs.length)continue;try{const g=THREE.BufferGeometryUtils.mergeBufferGeometries(gs);const me=new THREE.Mesh(g,m);me.castShadow=!m.isMeshBasicMaterial;me.receiveShadow=true;scene.add(me)}catch(e){console.warn('bld merge',e)}}BB.clear()}
+
+/* ---------- inside the research labs and warehouses ---------- */
+function labDress(){if(typeof LABS==='undefined')return;const tri=canvasTex(128,(t,s)=>{t.fillStyle='#0d2a33';t.fillRect(0,0,s,s);for(let r=0;r<4;r++)for(let c=0;c<4;c++){const x=c*32,y=r*32,up=(r+c)%2===0;t.fillStyle=`rgba(${90+Math.random()*40|0},${230+Math.random()*25|0},255,${.55+Math.random()*.35})`;t.beginPath();
+    if(up){t.moveTo(x+3,y+29);t.lineTo(x+16,y+4);t.lineTo(x+29,y+29)}else{t.moveTo(x+3,y+4);t.lineTo(x+29,y+4);t.lineTo(x+16,y+29)}t.fill()}});
+  const panel=new THREE.MeshBasicMaterial({map:tri,toneMapped:false,color:new THREE.Color(1.5,1.6,1.7)});panel.userData.gfxSkip=true;
+  const grate=new THREE.MeshStandardMaterial({map:canvasTex(128,(t,s)=>{t.fillStyle='#2a3036';t.fillRect(0,0,s,s);t.fillStyle='#11161a';for(let x=4;x<s;x+=12)t.fillRect(x,0,6,s);t.fillStyle='#3d464e';for(let y=0;y<s;y+=32)t.fillRect(0,y,s,3)}),metalness:.6,roughness:.45,polygonOffset:true,polygonOffsetFactor:-2});
+  const sign=new THREE.MeshBasicMaterial({map:canvasTex(256,(t,W,H)=>{t.fillStyle='#0b1a20';t.fillRect(0,0,W,H);t.strokeStyle='#5ff0ff';t.lineWidth=4;t.strokeRect(4,4,W-8,H-8);t.fillStyle='#bff8ff';t.font='bold 34px sans-serif';t.textAlign='center';t.textBaseline='middle';t.fillText('TELEPORTER',W/2,H/2)},64),toneMapped:false});
+  const strip=new THREE.MeshBasicMaterial({color:new THREE.Color(1.8,2,2.1),toneMapped:false});const tank=new THREE.MeshStandardMaterial({color:0x6fe8ff,emissive:0x2aa8c0,emissiveIntensity:.8,transparent:true,opacity:.75,roughness:.1});const steel=new THREE.MeshStandardMaterial({color:0x8a949c,metalness:.7,roughness:.35});
+  for(const h of LABS){const L=h.lab,r=L.room,H0=h.ht-16;
+    // glowing triangle panels lining the teleporter room, a grate floor and a light inside
+    const g=new THREE.PlaneGeometry(r.x1-r.x0-34,r.z1-r.z0-34);g.rotateX(-Math.PI/2);const f=new THREE.Mesh(g,grate);f.position.set((r.x0+r.x1)/2,.8,(r.z0+r.z1)/2);scene.add(f);
+    const along=L.nz!==0;const Wd=L.Wd,Dp=L.Dp;const bx=L.portal[0]-L.nx*46,bz=L.portal[1]-L.nz*46;
+    const pl=(w,hh,x,y,z,ry)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,hh),panel);m.position.set(x,y,z);m.rotation.y=ry;scene.add(m)};
+    if(along){pl(Wd-6,H0-30,bx,(H0-30)/2+10,bz+L.nz*1.5,L.nz>0?0:Math.PI);for(const sx of[-1,1])pl(Dp-24,H0-30,bx+sx*(Wd/2-1.5),(H0-30)/2+10,bz+L.nz*(Dp/2),sx>0?-Math.PI/2:Math.PI/2)}
+    else{pl(Wd-6,H0-30,bx+L.nx*1.5,(H0-30)/2+10,bz,L.nx>0?Math.PI/2:-Math.PI/2);for(const sz of[-1,1])pl(Dp-24,H0-30,bx+L.nx*(Dp/2),(H0-30)/2+10,bz+sz*(Wd/2-1.5),sz>0?Math.PI:0)}
+    const lt=new THREE.PointLight(0x7ff0ff,1.2,420,2);lt.position.set(bx+L.nx*80,H0-30,bz+L.nz*80);scene.add(lt);
+    // a lit sign over the way in, light strips on the lab ceiling and glowing sample tanks along the walls
+    const sg=new THREE.Mesh(new THREE.PlaneGeometry(110,28),sign);sg.position.set(bx+L.nx*(Dp+1),H0-24,bz+L.nz*(Dp+1));sg.rotation.y=Math.atan2(L.nx,L.nz);scene.add(sg);
+    const cx=h.x+h.w/2,cz=h.y+h.h/2;for(let i=-1;i<=1;i++){const s=new THREE.Mesh(new THREE.BoxGeometry(h.w>h.h?h.w*.7:8,3,h.w>h.h?8:h.h*.7),strip);s.position.set(cx+(h.w>h.h?0:i*h.w*.28),H0-2,cz+(h.w>h.h?i*h.h*.28:0));scene.add(s)}
+    const corners=[[h.x+34,h.y+34],[h.x+h.w-34,h.y+34],[h.x+34,h.y+h.h-34],[h.x+h.w-34,h.y+h.h-34]].filter(([x,z])=>!(x>r.x0-60&&x<r.x1+60&&z>r.z0-60&&z<r.z1+60)&&!BOX3.some(b=>b.house===h&&b.k==='furn'&&x>b.x-20&&x<b.x+b.w+20&&z>b.y-20&&z<b.y+b.h+20));
+    for(const[x,z]of corners.slice(0,2)){const c=new THREE.Mesh(new THREE.CylinderGeometry(14,14,90,16),tank);c.position.set(x,55,z);scene.add(c);for(const y of[8,102]){const m=new THREE.Mesh(new THREE.CylinderGeometry(17,17,12,16),steel);m.position.set(x,y,z);scene.add(m)}}}
+  // warehouses: steel roof trusses and hanging lamps
+  const beam=new THREE.MeshStandardMaterial({color:0x5a6066,metalness:.6,roughness:.5});const lamp=new THREE.MeshBasicMaterial({color:new THREE.Color(2,1.8,1.4),toneMapped:false});
+  for(const h of HOUSES){if(h.type!=='warehouse')continue;const along=h.w>=h.h,L=along?h.w:h.h,S=along?h.h:h.w;for(let a=90;a<L-60;a+=160){const x=along?h.x+a:h.x+h.w/2,z=along?h.y+h.h/2:h.y+a;
+      const b=new THREE.Mesh(new THREE.BoxGeometry(along?8:S-30,10,along?S-30:8),beam);b.position.set(x,h.ht-40,z);scene.add(b);const l=new THREE.Mesh(new THREE.ConeGeometry(14,10,12,1,true),lamp);l.position.set(x,h.ht-60,z);scene.add(l)}
+    }}
 
 /* ================= renderer ================= */
 // hex colours are authored in sRGB; convert them so lighting and the final gamma step reproduce them faithfully
@@ -6999,7 +7048,7 @@ const FX_SPIN=[];
       const pts=[];for(let i=0;i<=24;i++){const t=i/24;pts.push(a.clone().lerp(b,t).add(new THREE.Vector3(0,-Math.sin(t*Math.PI)*14,0)))}
       const cable=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),48,1.4,6,false),new THREE.MeshStandardMaterial({color:0x22262c,metalness:.8,roughness:.35}));cable.castShadow=true;scene.add(cable);
       const glow=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),48,.6,4,false),rim);glow.position.y=-2;glow.userData.noMerge=true;scene.add(glow)}
-    else if(f.t==='portal'){const P2=new THREE.Color(1.8,.7,2.6),pm=new THREE.MeshBasicMaterial({color:P2,toneMapped:false});const ang=Math.atan2(f.b[0]-f.a[0],f.b[1]-f.a[1]);
+    else if(f.t==='portal'){const P2=f.lab?new THREE.Color(.6,1.9,2.4):new THREE.Color(1.8,.7,2.6),pm=new THREE.MeshBasicMaterial({color:P2,toneMapped:false});const ang=f.rot!=null?f.rot:Math.atan2(f.b[0]-f.a[0],f.b[1]-f.a[1]);
       const g=new THREE.Group();g.position.set(f.a[0],0,f.a[1]);g.rotation.y=ang;const frame=new THREE.Mesh(new THREE.TorusGeometry(54,6,10,40),base);frame.position.y=74;frame.scale.set(1,1.4,1);g.add(frame);
       const edge=new THREE.Mesh(new THREE.TorusGeometry(50,2,8,40),pm);edge.position.y=74;edge.scale.set(1,1.4,1);g.add(edge);
       const d=new THREE.Mesh(new THREE.CircleGeometry(49,40),discMat());d.material.color=P2;d.position.y=74;d.scale.set(1,1.4,1);g.add(d);FX_SPIN.push({m:d,s:-2.6});
@@ -7473,7 +7522,7 @@ const MOTES=(()=>{const N=1400,B=900;const pos=new Float32Array(N*3),rnd=new Flo
     vertexShader:`attribute float rnd;uniform float uT,uB;uniform vec3 uCam,uWind;varying float vA;void main(){vec3 p=position+uWind*uT*(.6+rnd*.8)+vec3(sin(uT*.7+rnd*30.)*12.,sin(uT*.5+rnd*20.)*6.,cos(uT*.6+rnd*25.)*12.);
       p.xz=mod(p.xz-uCam.xz+uB*.5,uB)-uB*.5+uCam.xz;vec4 mv=modelViewMatrix*vec4(p,1.);float d=-mv.z;vA=(.25+.75*rnd)*smoothstep(20.,90.,d)*(1.-smoothstep(380.,450.,length(p.xz-uCam.xz)));gl_PointSize=clamp((1.2+rnd*2.)*300./d,1.,7.);gl_Position=projectionMatrix*mv;}`,
     fragmentShader:`uniform sampler2D uTex;varying float vA;void main(){vec4 t=texture2D(uTex,gl_PointCoord);gl_FragColor=vec4(vec3(1.,.93,.78)*t.a*vA*.55,1.);}`});
-  const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=7;scene.add(pts);return m})();
+  const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=7;pts.visible=false;/* motes read as snow, so they stay off */scene.add(pts);return m})();
 
 /* ---------- grass tufts along wall bases and open ground, swaying with the same wind as the trees ---------- */
 const GRASS=(()=>{const tex=canvasTex(128,(c,s)=>{c.clearRect(0,0,s,s);for(let i=0;i<34;i++){const x=10+Math.random()*108,h=50+Math.random()*74,lean=(Math.random()-.5)*34,w=2+Math.random()*3.5;
@@ -8503,7 +8552,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'72',t:'29 Oct 2026, 10:19 PM'};
+const GAME_VERSION={n:'73',t:'30 Oct 2026, 7:47 AM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
@@ -9045,6 +9094,7 @@ try{MAP_COL.kasbah='#e3a457';MAP_COL.rustveil='#6dd6a0'}catch(e){}
   const per=(W+H)*2;for(let d=0;d<per;d+=180+R()*160){let x,z,nx,nz;if(d<W){x=d;z=0;nx=0;nz=-1}else if(d<W+H){x=W;z=d-W;nx=1;nz=0}else if(d<2*W+H){x=2*W+H-d;z=H;nx=0;nz=1}else{x=0;z=per-d;nx=-1;nz=0}
     const off=120+R()*600,h=330+R()*420,w=150+R()*200,dd=150+R()*200;const g=new THREE.BoxGeometry(w,h,dd);g.translate(x+nx*off,h/2,z+nz*off);sk.push(g)}
   add(sk,bm,{cast:false})})();
+try{if(!SAFE)labDress()}catch(e){console.warn('labs',e)}
 
 /* ================= admin panel, round 2 =================
    - Press F2 in any match (or use the button in the pause menu) to open the admin panel and switch cheats on and off mid-game.
