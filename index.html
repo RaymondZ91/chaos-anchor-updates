@@ -7886,7 +7886,7 @@ const offline=()=>!!mode;// admin cheats now work in every game, online included
 stepFx=(o=>function(dt){o.apply(this,arguments);if(!isAdmin()||!offline()||!P)return;const C=ADM.cheats;
   if(C.god&&P.alive){P.hp=100;P.shield=Math.max(P.shield||0,50)}
   if(C.ammo&&P.alive){const w=cur(P);const g=w&&GUNS[w.gun];if(g&&!g.melee&&g.mag){w.ammo=g.mag;P.reload=0}}
-  if(C.wall){for(const a of(mp&&(mode==='odm'||mode==='otdm')?[...mp.remotes.values()]:agents)){if(a===P||!a.mesh||sameTeam(a,P))continue;a.mesh.traverse(n=>{if(n.isMesh&&n.material&&!n.userData.admW){n.userData.admW=1;n.material=n.material.clone();n.material.depthTest=false;n.renderOrder=999}})}}})(stepFx);
+  if(C.wall){for(const a of(mp&&(mode==='odm'||mode==='otdm')?[...mp.remotes.values()]:agents)){if(a===P||!a.mesh||sameTeam(a,P))continue;a.mesh.traverse(n=>{if((n.isMesh||n.isSkinnedMesh)&&n.material&&!n.userData.admW){n.userData.admW=1;const see=m=>{const c=m.clone();c.depthTest=false;return c};n.material=Array.isArray(n.material)?n.material.map(see):see(n.material);n.renderOrder=999}})}}})(stepFx);
 damage=(o=>function(t,amount,att){if(att&&att===P&&ADM.cheats.oneshot&&isAdmin()&&offline()&&t!==P)amount=Math.max(amount,999);return o.call(this,t,amount,att,arguments[3],arguments[4])})(damage);
 // announcements from admins
 const ANN_SEEN=new Set();setInterval(()=>{if(!ROOM)return;for(const p of lobbyPeers()){const a=p.presence.ann;if(!a||typeof a.text!=='string'||ANN_SEEN.has(a.t))continue;ANN_SEEN.add(a.t);
@@ -8359,7 +8359,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'70',t:'29 Oct 2026, 8:57 PM'};
+const GAME_VERSION={n:'71',t:'29 Oct 2026, 10:06 PM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
