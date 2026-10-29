@@ -6,7 +6,7 @@
   window.__APP = true;
   window.__OWNER_HASH = '879ea5e47fab72cace7c5699d3c1570c86271648fd72843249dbb2759131cac8';   // only a one-way hash of the owner code is stored
   window.__OWNER2_HASH = '85b72b321284915c6a8d720bee5503b25e19b0c2ce2859e1957ecd85c03acd8d';   // the owner's long code (manage admins and bans); also only a hash
-  var BAKED = '%%SERVER_URL%%';                         // filled in when the app is built
+  var BAKED = 'https://chaos-anchor.onrender.com';                         // filled in when the app is built
   function serverUrl(){ var s = ''; try { s = localStorage.getItem('ca.server') || ''; } catch (e) {} if (!s && BAKED.indexOf('%%') !== 0) s = BAKED; if (!s && /^https?:$/.test(location.protocol)) s = location.origin; return s.trim(); }  // on the website the server is the page's own address
   // what people type to join: a Host Game code (brave-apple-river-cat), a same-Wi-Fi address (192.168.1.5:47777) or a full server address
   function normServer(v){ v = String(v || '').trim().replace(/\/+$/, ''); if (!v) return '';
@@ -8244,7 +8244,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'66',t:'29 Oct 2026, 7:11 PM'};
+const GAME_VERSION={n:'67',t:'29 Oct 2026, 7:25 PM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
