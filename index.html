@@ -3611,11 +3611,18 @@ const GRID0=MD?MD.grid:["################################",
 const GRID=GRID0.map(r=>r.replace(/v/g,'.'));
 const COLS=GRID[0].length,ROWS=GRID.length,W=COLS*TILE,H=ROWS*TILE;
 const tileAt=(x,z)=>{const c=Math.floor(x/TILE),r=Math.floor(z/TILE);return(r<0||c<0||r>=ROWS||c>=COLS)?'#':GRID[r][c]};
+// wall heights at a human scale (a player is ~72 tall, ~40 units a metre): 1x1 pillars are cover (~3.7 m), thin dividing walls
+// one or two storeys (~5-6 m), bigger blocks read as two/three-storey buildings, the boundary ~7.5 m so the sky and skyline show.
+// Anything near a raised platform stays tall enough that nobody standing up there can see over it.
+const RAISED=((MD?MD.struct:SALT_STRUCT)||{boxes:[]}).boxes.filter(b=>b[5]>=100&&(b[6]==='plat'||b[6]==='walk'||b[6]==='bridge'));
+function blockHt(x,y,w,h,edge,small){const v=(x*7+y*13)%4,X=x*TILE,Z=y*TILE,Wd=w*TILE,Hd=h*TILE;let top=0;
+  for(const b of RAISED){const dx=Math.max(b[0]-(X+Wd),X-(b[0]+b[2]),0),dz=Math.max(b[1]-(Z+Hd),Z-(b[1]+b[3]),0);if(Math.hypot(dx,dz)<TILE*7)top=Math.max(top,b[5])}
+  const lg=GMUL<1?70:0;let ht=edge?300:small?150:Math.min(w,h)<=1?200+v*16:236+v*28;if(!edge&&!small&&top)ht=Math.max(ht,top+150);return ht+(small?0:lg)}
 const BLOCKS=(()=>{const used=GRID.map(r=>[...r].map(()=>false)),out=[];
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){if(GRID[y][x]!=='#'||used[y][x])continue;let w=0;while(x+w<COLS&&GRID[y][x+w]==='#'&&!used[y][x+w])w++;let h=1;
     outer:while(y+h<ROWS){for(let i=0;i<w;i++)if(GRID[y+h][x+i]!=='#'||used[y+h][x+i])break outer;h++}
     for(let j=0;j<h;j++)for(let i=0;i<w;i++)used[y+j][x+i]=true;const edge=x===0||y===0||x+w===COLS||y+h===ROWS;const small=w*h===1&&!edge;
-    out.push({x:x*TILE,y:y*TILE,w:w*TILE,h:h*TILE,ht:edge?440:small?240:260+((x*7+y*13)%4)*45,kind:small?'pillar':'bldg',edge,seed:x*31+y*17})}return out})();
+    out.push({x:x*TILE,y:y*TILE,w:w*TILE,h:h*TILE,ht:blockHt(x,y,w,h,edge,small),kind:small?'pillar':'bldg',edge,seed:x*31+y*17})}return out})();
 const ROOF_H=360;
 // houses you can walk into: most mid-sized interior blocks become hollow two-storey buildings with doors, windows, stairs and a rooftop
 const HOUSES=(()=>{const out=[],T=TILE;let s=7;for(const ch of MAPID)s=(s*131+ch.charCodeAt(0))>>>0;const R=()=>{s=(s*1103515245+12345)>>>0;return(s>>>8)/16777216};
@@ -3717,7 +3724,7 @@ const inBox=(b,x,z,r)=>x>b.x-r&&x<b.x+b.w+r&&z>b.y-r&&z<b.y+b.h+r;
 function rectMinus(x0,z0,x1,z1,hx0,hz0,hx1,hz1){const o=[];hx0=Math.max(hx0,x0);hz0=Math.max(hz0,z0);hx1=Math.min(hx1,x1);hz1=Math.min(hz1,z1);if(hx0>=hx1||hz0>=hz1)return[[x0,z0,x1,z1]];
   if(hz0>z0)o.push([x0,z0,x1,hz0]);if(hz1<z1)o.push([x0,hz1,x1,z1]);if(hx0>x0)o.push([x0,hz0,hx0,hz1]);if(hx1<x1)o.push([hx1,hz0,x1,hz1]);return o}
 function houseBoxes(h){const out=[],t=16,H=h.ht,F=216,T=TILE,x0=h.x,z0=h.y,x1=h.x+h.w,z1=h.y+h.h;const add=(x,z,w,d,y0,y1,k)=>{if(w>1&&d>1&&y1>y0)out.push({x,y:z,w,h:d,y0,y1,k,house:h})};
-  const bands=[[0,40,'d'],[40,122,'dw'],[122,160,'d'],[160,240,''],[240,312,'w'],[312,H,'']];
+  const bands=[[0,40,'d'],[40,122,'dw'],[122,160,'d'],[160,240,''],[240,312,''],[312,H,'']];
   for(const sd of['N','S','W','E']){const horiz=sd==='N'||sd==='S';const a0=horiz?x0:z0+t,a1=horiz?x1:z1-t;const fixed=sd==='N'?z0:sd==='S'?z1-t:sd==='W'?x0:x1-t;
     const doorC=h.doors.filter(d=>d[0]===sd).map(d=>(horiz?x0:z0)+(d[1]+.5)*T);const wins=[];for(let a=a0+75;a<a1-60;a+=150){if(!doorC.some(dc=>Math.abs(dc-a)<115))wins.push(a)}
     const seg=(a,b,y0,y1)=>{if(horiz)add(a,fixed,b-a,t,y0,y1,'hw');else add(fixed,a,t,b-a,y0,y1,'hw')};
@@ -3750,11 +3757,11 @@ function houseBoxes(h){const out=[],t=16,H=h.ht,F=216,T=TILE,x0=h.x,z0=h.y,x1=h.
       placed.push({x:px,y:pz,w,h:d,fl});const ht=def[3];out.push({x:px,y:pz,w,h:d,y0:y,y1:y+ht,k:'furn',f:name,side,house:h});k++}}
   return out}
 // plank bridges between neighbouring rooftops (only where nothing taller is in the way)
-(function(){let n=0;const blocked=r=>WALLS.some(w=>w.ht>ROOF_H-24&&r.x<w.x+w.w&&r.x+r.w>w.x&&r.y<w.y+w.h&&r.y+r.h>w.y);
+(function(){let n=99;/* no rooftop play: nobody stands above the walls except the site heavens */const blocked=r=>WALLS.some(w=>w.ht>ROOF_H-24&&r.x<w.x+w.w&&r.x+r.w>w.x&&r.y<w.y+w.h&&r.y+r.h>w.y);
   for(const A of HOUSES)for(const B of HOUSES){if(A===B||n>=10)continue;
     const gx=B.x-(A.x+A.w),oz0=Math.max(A.y,B.y),oz1=Math.min(A.y+A.h,B.y+B.h);if(gx>0&&gx<=340&&oz1-oz0>=160){const zc=(oz0+oz1)/2,r={x:A.x+A.w-8,y:zc-56,w:gx+16,h:112};if(!blocked(r)){BOX3.push({x:r.x,y:r.y,w:r.w,h:r.h,y0:ROOF_H-16,y1:ROOF_H,k:'bridge'});A.gaps.push(['E',zc]);B.gaps.push(['W',zc]);n++}}
     const gz=B.y-(A.y+A.h),ox0=Math.max(A.x,B.x),ox1=Math.min(A.x+A.w,B.x+B.w);if(gz>0&&gz<=340&&ox1-ox0>=160){const xc=(ox0+ox1)/2,r={x:xc-56,y:A.y+A.h-8,w:112,h:gz+16};if(!blocked(r)){BOX3.push({x:r.x,y:r.y,w:r.w,h:r.h,y0:ROOF_H-16,y1:ROOF_H,k:'bridge'});A.gaps.push(['S',xc]);B.gaps.push(['N',xc]);n++}}}})();
-for(const h of HOUSES){const bs=houseBoxes(h);h.boxes=bs;for(const b of bs)BOX3.push(b);LADDERS.push(h.ladder)}
+for(const h of HOUSES){const bs=houseBoxes(h);h.boxes=bs;for(const b of bs)BOX3.push(b)}
 // more places to hide: crate stacks on every site and a crate at each main choke, always with room to walk around them.
 // Half-height crates (70) are cover you can peek over; tall stacks (130+) hide you completely.
 (()=>{const R=(()=>{let v=97531+W;return()=>{v=(v*16807)%2147483647;return v/2147483647}})();const placed=[];
@@ -3814,7 +3821,7 @@ if(NAV.on){const fp0=findPath,cp0=clearPath;findPath=function(sx,sz,tx,tz,sy,ty)
 
 /* ---------- high routes for every map: ziplines between rooftops/platforms, and a one-way portal across the map ---------- */
 for(let i=FEATURES.length-1;i>=0;i--)if(FEATURES[i].t==='zip')FEATURES.splice(i,1);
-(function(){const tops=[];for(const h of HOUSES)tops.push({x0:h.x+30,z0:h.y+30,x1:h.x+h.w-30,z1:h.y+h.h-30,y:ROOF_H});
+(function(){const tops=[];
   for(const b of BOX3)if((b.k==='plat'||b.k==='walk')&&b.w>=120&&b.h>=120&&b.y1>=120)tops.push({x0:b.x+30,z0:b.y+30,x1:b.x+b.w-30,z1:b.y+b.h-30,y:b.y1});
   const anchor=(t,tx,tz)=>{const cx=(t.x0+t.x1)/2,cz=(t.z0+t.z1)/2,dx=tx-cx,dz=tz-cz,d=Math.hypot(dx,dz)||1;let s=1e9;if(dx)s=Math.min(s,(dx>0?t.x1-cx:cx-t.x0)/Math.abs(dx/d));if(dz)s=Math.min(s,(dz>0?t.z1-cz:cz-t.z0)/Math.abs(dz/d));s=Math.max(0,s-10);return[cx+dx/d*s,cz+dz/d*s]};
   const pairs=[];for(let i=0;i<tops.length;i++)for(let j=i+1;j<tops.length;j++){const A=tops[i],B=tops[j];const a=anchor(A,(B.x0+B.x1)/2,(B.z0+B.z1)/2),b=anchor(B,(A.x0+A.x1)/2,(A.z0+A.z1)/2),d=Math.hypot(b[0]-a[0],b[1]-a[1]);if(d<500||d>2600)continue;
@@ -4282,7 +4289,7 @@ function buildHouses(K){if(!HOUSES.length)return;const wood=new THREE.MeshStanda
     // a plinth and a cornice so the shell reads as a building from outside
     const cx=h.x+h.w/2,cz=h.y+h.h/2;const tm=city?trimMat:K.trim;// a cornice band around the outside only (a full slab hid the roof hatch from inside)
     box(h.w+6,8,6,tm,cx,h.ht-24,h.y-1,{cast:false});box(h.w+6,8,6,tm,cx,h.ht-24,h.y+h.h+1,{cast:false});box(6,8,h.h+6,tm,h.x-1,h.ht-24,cz,{cast:false});box(6,8,h.h+6,tm,h.x+h.w+1,h.ht-24,cz,{cast:false});
-    if(h.ladder){const L=h.ladder,hx=L.x+L.nx*16,hz=L.z,y=h.ht+1,hm=new THREE.MeshStandardMaterial({color:0xf2c14e,roughness:.6});// a bright frame around the roof hatch, top and bottom
+    if(false&&h.ladder){const L=h.ladder,hx=L.x+L.nx*16,hz=L.z,y=h.ht+1,hm=new THREE.MeshStandardMaterial({color:0xf2c14e,roughness:.6});// a bright frame around the roof hatch, top and bottom
       for(const yy of[y,h.ht-17]){box(84,3,6,hm,hx,yy,hz-41,{cast:false});box(84,3,6,hm,hx,yy,hz+41,{cast:false});box(6,3,84,hm,hx-41,yy,hz,{cast:false});box(6,3,84,hm,hx+41,yy,hz,{cast:false})}}
     if(HOUSES.indexOf(h)<6){const l=new THREE.PointLight(THEME==='frost'?0xbfe0ff:0xffd9a0,1.1,Math.max(h.w,h.h)*1.3,1.5);l.position.set(cx,200,cz);scene.add(l)}}}
 /* ---------- furniture: built from simple parts so each piece reads clearly (the collision is its bounding box) ---------- */
@@ -8352,7 +8359,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'68',t:'29 Oct 2026, 8:09 PM'};
+const GAME_VERSION={n:'69',t:'29 Oct 2026, 8:30 PM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
@@ -8852,11 +8859,47 @@ float gfxN(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(gfx
 (function motes(){if(SAFE||THEME==='frost')return;const N=180,R=700,pos=new Float32Array(N*3),seed=new Float32Array(N);for(let i=0;i<N;i++){pos[i*3]=(Math.random()-.5)*2*R;pos[i*3+1]=Math.random()*260;pos[i*3+2]=(Math.random()-.5)*2*R;seed[i]=Math.random()*100}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));const tex=canvasTex(32,(t,s)=>{const r=t.createRadialGradient(16,16,0,16,16,16);r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(1,'rgba(255,255,255,0)');t.fillStyle=r;t.fillRect(0,0,s,s)});
   const col=EV_VARIANT==='abbey'?0xc8ffd8:THEME==='moon'?0xb8c4ff:EV_VARIANT==='night'||EV_VARIANT==='haunt'?0xa8b8ff:0xffe2b0;
-  const pts=new THREE.Points(g,new THREE.PointsMaterial({map:tex,color:col,size:1.1,sizeAttenuation:true,transparent:true,opacity:.4,depthWrite:false,blending:THREE.AdditiveBlending}));pts.frustumCulled=false;scene.add(pts);
+  const pts=new THREE.Points(g,new THREE.PointsMaterial({map:tex,color:col,size:.8,sizeAttenuation:true,transparent:true,opacity:.22,depthWrite:false,blending:THREE.AdditiveBlending}));pts.frustumCulled=false;scene.add(pts);
   let last=performance.now();(function tick(){const now=performance.now(),dt=Math.min(.1,(now-last)/1000);last=now;try{pts.visible=!!mode&&GFX_HI();if(pts.visible){const cx=camera.position.x,cz=camera.position.z,t=now/1000;
       for(let i=0;i<N;i++){let x=pos[i*3]+Math.sin(t*.3+seed[i])*dt*6+dt*4,y=pos[i*3+1]+Math.sin(t*.5+seed[i]*2)*dt*5,z=pos[i*3+2]+Math.cos(t*.27+seed[i])*dt*6;
         const rx=x-cx,rz=z-cz;if(rx>R)x-=2*R;else if(rx<-R)x+=2*R;if(rz>R)z-=2*R;else if(rz<-R)z+=2*R;if(y>280)y=8;else if(y<4)y=270;pos[i*3]=x;pos[i*3+1]=y;pos[i*3+2]=z}g.attributes.position.needsUpdate=true}}catch(e){}requestAnimationFrame(tick)})()})();
 try{MAP_COL.kasbah='#e3a457';MAP_COL.rustveil='#6dd6a0'}catch(e){}
+
+/* ---------- buildings, not slabs: windows, ledges, roofs and rooftop clutter on every block, and a skyline beyond the boundary ---------- */
+(function facades(){if(SAFE||typeof faceSpots!=='function')return;const R=(()=>{let s=777;return()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff}})();
+  const V=EV_VARIANT,city=THEME==='city',sty=V==='abbey'?'gothic':V==='bazaar'||THEME==='ruin'?'arch':THEME==='frost'||THEME==='moon'||V==='night'?'tech':THEME==='sky'?'temple':'shutter';
+  const winTex=canvasTex(128,(t,s)=>{t.clearRect(0,0,s,s);const dark=V==='night'||V==='haunt'||V==='eclipse'||THEME==='moon';
+    if(sty==='gothic'){t.fillStyle='#3a3d40';t.beginPath();t.moveTo(34,s-6);t.lineTo(34,44);t.quadraticCurveTo(64,-4,94,44);t.lineTo(94,s-6);t.fill();t.fillStyle=dark?'#ffcf7a':'#24303a';t.beginPath();t.moveTo(42,s-14);t.lineTo(42,48);t.quadraticCurveTo(64,10,86,48);t.lineTo(86,s-14);t.fill();t.strokeStyle='#3a3d40';t.lineWidth=4;t.beginPath();t.moveTo(64,20);t.lineTo(64,s-14);t.moveTo(42,70);t.lineTo(86,70);t.stroke()}
+    else if(sty==='arch'){t.fillStyle='#e8d2a8';t.beginPath();t.moveTo(26,s-4);t.lineTo(26,50);t.arc(64,50,38,Math.PI,0);t.lineTo(102,s-4);t.fill();t.fillStyle=dark?'#ffb860':'#3a2a1c';t.beginPath();t.moveTo(36,s-12);t.lineTo(36,52);t.arc(64,52,28,Math.PI,0);t.lineTo(92,s-12);t.fill();
+      t.strokeStyle='#8a5a30';t.lineWidth=2;for(let x=40;x<92;x+=8){t.beginPath();t.moveTo(x,40);t.lineTo(x,s-12);t.stroke()}for(let y=56;y<s-12;y+=8){t.beginPath();t.moveTo(36,y);t.lineTo(92,y);t.stroke()}}
+    else if(sty==='tech'){t.fillStyle='#2b3138';t.fillRect(18,22,92,86);t.fillStyle=dark||THEME==='frost'?'#cfe6ff':'#5a7a96';t.fillRect(24,28,80,74);t.fillStyle='rgba(255,255,255,.35)';t.fillRect(24,28,80,10);t.fillStyle='#2b3138';t.fillRect(62,28,4,74);t.fillRect(24,62,80,4)}
+    else if(sty==='temple'){t.fillStyle='#d9b25a';t.beginPath();t.moveTo(30,s-4);t.lineTo(30,46);t.arc(64,46,34,Math.PI,0);t.lineTo(98,s-4);t.fill();t.fillStyle='#9fc8f0';t.beginPath();t.moveTo(38,s-12);t.lineTo(38,48);t.arc(64,48,26,Math.PI,0);t.lineTo(90,s-12);t.fill()}
+    else{t.fillStyle='#f1ead8';t.fillRect(30,14,68,104);t.fillStyle=dark?'#ffd28a':'#2a3a48';t.fillRect(38,22,52,88);t.strokeStyle='#f1ead8';t.lineWidth=4;t.beginPath();t.moveTo(64,22);t.lineTo(64,110);t.moveTo(38,66);t.lineTo(90,66);t.stroke();
+      const sh=['#3f6e5a','#2f5d8a','#8a3f2f'][Math.floor(Math.random()*3)];t.fillStyle=sh;t.fillRect(8,16,22,100);t.fillRect(98,16,22,100);t.fillStyle='rgba(0,0,0,.25)';for(let y=20;y<114;y+=8){t.fillRect(8,y,22,2);t.fillRect(98,y,22,2)}}});
+  winTex.wrapS=winTex.wrapT=THREE.ClampToEdgeWrapping;
+  const glowWin=V==='night'||V==='haunt'||V==='eclipse'||THEME==='moon';
+  const winMat=new THREE.MeshStandardMaterial({map:winTex,transparent:true,alphaTest:.4,roughness:.5,metalness:.1,emissive:glowWin?0xffffff:0x000000,emissiveMap:glowWin?winTex:null,emissiveIntensity:glowWin?.55:0,polygonOffset:true,polygonOffsetFactor:-2});winMat.userData.gfxSkip=true;
+  const trimCol={city:0xe8dcc4,ruin:V==='abbey'?0x7c7f80:0xe2c49a,frost:0xdfe7ee,moon:0xa8b0c0,sky:0xe9d9a8}[THEME]||0xcccccc;const trimMat=new THREE.MeshStandardMaterial({color:trimCol,roughness:.8});
+  const wins=[],ledges=[],clutter=[],sills=[];
+  for(const f of faceSpots()){const b=f.b;if(b.kind==='pillar'||b.ht<190)continue;const ang=Math.atan2(f.nx,f.nz);
+    // a window per tile on the upper storey (only above head height, so nothing looks like a doorway you can use)
+    if(!city&&R()<.62){const y=Math.min(b.ht-50,150+R()*30),wv=sty==='tech'?70:56,hv=sty==='tech'?52:76;const g=new THREE.PlaneGeometry(wv,hv);g.rotateY(ang);g.translate(f.x+f.nx*1.2+(f.nz?(R()-.5)*30:0),y,f.z+f.nz*1.2+(f.nx?(R()-.5)*30:0));wins.push(g);
+      const s=new THREE.BoxGeometry(f.nz?wv+8:6,4,f.nx?wv+8:6);s.translate(f.x+f.nx*3,y-hv/2-2,f.z+f.nz*3);sills.push(s)}
+    // a string course (ledge) wrapping the building at the first floor
+    {const g=new THREE.BoxGeometry(f.nz?TILE+2:6,7,f.nx?TILE+2:6);g.translate(f.x+f.nx*2,118,f.z+f.nz*2);ledges.push(g)}}
+  // rooftop clutter and pitched roofs on the bigger interior buildings
+  const roofCol=V==='abbey'?0x3c4248:THEME==='city'?0xb4583a:V==='bazaar'?0xd9b98a:THEME==='frost'?0xe9eef3:0x8a6a4a;const roofMat=new THREE.MeshStandardMaterial({color:roofCol,roughness:.85,flatShading:true});const roofs=[];
+  for(const b of BLOCKS){if(b.edge||b.kind==='pillar')continue;const cx=b.x+b.w/2,cz=b.y+b.h/2,small=Math.min(b.w,b.h);
+    if((THEME==='city'||V==='abbey')&&small>=TILE*2&&R()<.7){const along=b.w>=b.h,L=along?b.w:b.h,Wd=along?b.h:b.w,rh=V==='abbey'?Wd*.6:Wd*.32;const g=new THREE.CylinderGeometry(0,Wd*.72,rh,4,1);g.rotateY(Math.PI/4);g.scale(along?L/(Wd*1.02):1,1,along?1:L/(Wd*1.02));g.translate(cx,b.ht+10+rh/2,cz);roofs.push(g)}
+    else{const n=1+(R()*3|0);for(let i=0;i<n;i++){const k=R(),x=b.x+30+R()*(b.w-60),z=b.y+30+R()*(b.h-60),y=b.ht+10;
+      if(k<.4){const g=new THREE.BoxGeometry(34,22,26);g.translate(x,y+11,z);clutter.push(g)}else if(k<.65){const g=new THREE.CylinderGeometry(16,16,34,10);g.translate(x,y+17,z);clutter.push(g)}else if(k<.85){const g=new THREE.BoxGeometry(14,40,14);g.translate(x,y+20,z);clutter.push(g)}else{const g=new THREE.CylinderGeometry(1,1,70,4);g.translate(x,y+35,z);clutter.push(g)}}}}
+  const add=(arr,m,o={})=>{if(!arr.length)return;const me=new THREE.Mesh(THREE.BufferGeometryUtils.mergeBufferGeometries(arr.map(g=>g.index?g.toNonIndexed():g)),m);me.castShadow=o.cast!==false;me.receiveShadow=true;if(o.order)me.renderOrder=o.order;scene.add(me)};
+  add(wins,winMat,{cast:false,order:1});add(sills,trimMat);add(ledges,trimMat);add(roofs,roofMat);add(clutter,new THREE.MeshStandardMaterial({color:THEME==='frost'?0xc8d2dc:0x8a8a86,roughness:.6,metalness:.3}));
+  // a skyline just past the boundary so the lower outer walls show town and sky instead of nothing
+  if(THEME==='sky'||THEME==='moon')return;const sk=[];const bm=new THREE.MeshStandardMaterial({color:V==='abbey'?0x6e7378:THEME==='frost'?0xb9c6d2:THEME==='city'?0xe2cfae:0xc9a87e,roughness:.9});
+  const per=(W+H)*2;for(let d=0;d<per;d+=180+R()*160){let x,z,nx,nz;if(d<W){x=d;z=0;nx=0;nz=-1}else if(d<W+H){x=W;z=d-W;nx=1;nz=0}else if(d<2*W+H){x=2*W+H-d;z=H;nx=0;nz=1}else{x=0;z=per-d;nx=-1;nz=0}
+    const off=120+R()*600,h=330+R()*420,w=150+R()*200,dd=150+R()*200;const g=new THREE.BoxGeometry(w,h,dd);g.translate(x+nx*off,h/2,z+nz*off);sk.push(g)}
+  add(sk,bm,{cast:false})})();
 
 window.__bootOK=1;
 })();
