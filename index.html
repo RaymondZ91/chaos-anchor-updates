@@ -3638,9 +3638,13 @@ const HOUSES=(()=>{const out=[],T=TILE;let s=7;for(const ch of MAPID)s=(s*131+ch
     const doors=[];for(const sd of['N','S','W','E']){const L=[];if(sd==='N')for(let c=c0;c<=c1;c++)L.push(walk(c,r0-1));if(sd==='S')for(let c=c0;c<=c1;c++)L.push(walk(c,r1+1));if(sd==='W')for(let r=r0;r<=r1;r++)L.push(walk(c0-1,r));if(sd==='E')for(let r=r0;r<=r1;r++)L.push(walk(c1+1,r));
       const idx=L.map((v,k)=>v?k:-1).filter(k=>k>=0);if(idx.length)doors.push([sd,idx[Math.floor(idx.length/2)]])}
     if(!doors.length)continue;doors.sort(()=>R()-.5);
-    const big=tw*th>=12;out.push({x:b.x,y:b.y,w:b.w,h:b.h,ht:big?280:240,single:true,type:big?'warehouse':'hall',gaps:[],doors:doors.slice(0,big?3:2),seed:b.seed,flip:R()<.5});BLOCKS.splice(i,1);
-    for(let r=r0;r<=r1;r++)GRID[r]=GRID[r].slice(0,c0)+'h'.repeat(tw)+GRID[r].slice(c1+1)}
-  return out})();
+    const big=tw*th>=12;out.push({x:b.x,y:b.y,w:b.w,h:b.h,ht:big?280:240,single:true,type:big?'warehouse':'hall',gaps:[],doors:doors.slice(0,big?3:2),seed:b.seed,flip:R()<.5,blk:b,c0,r0,c1,r1,tw})}
+  // keep it mostly outdoors: only two far-apart buildings (the research labs) and at most one warehouse can be entered; the rest stay solid
+  const ok=h=>Math.min(h.w,h.h)>=3*T,pool=out.filter(ok).length>=2?out.filter(ok):out;let pair=null,bd=0;
+  for(let i=0;i<pool.length;i++)for(let j=i+1;j<pool.length;j++){const d=Math.hypot(pool[i].x+pool[i].w/2-pool[j].x-pool[j].w/2,pool[i].y+pool[i].h/2-pool[j].y-pool[j].h/2);if(d>bd){bd=d;pair=[pool[i],pool[j]]}}
+  const keep=pair?pair.slice():[];const wh=out.filter(h=>!keep.includes(h)&&h.type==='warehouse').sort((p,q)=>q.w*q.h-p.w*p.h)[0];if(wh)keep.push(wh);
+  for(const h of keep){const i=BLOCKS.indexOf(h.blk);if(i>=0)BLOCKS.splice(i,1);for(let r=h.r0;r<=h.r1;r++)GRID[r]=GRID[r].slice(0,h.c0)+'h'.repeat(h.tw)+GRID[r].slice(h.c1+1)}
+  return keep})();
 const PROPS=MD?MD.props.map(([kind,x,y,w,h,ht])=>({kind,x,y,w,h,ht})):[['box',300,460,90,90],['crate',640,470,60,60],['crate',420,860,60,60],['barrel',880,620,44,44],['cont',205,720,60,150],
 ['box',2810,460,90,90],['crate',2500,470,60,60],['crate',2720,860,60,60],['barrel',2276,620,44,44],['cont',2935,720,60,150],
 ['crate',1280,760,60,60],['crate',1860,860,60,60],['barrel',1580,1290,44,44],['box',1330,960,80,80],['crate',1450,520,60,60],
@@ -8653,7 +8657,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'74',t:'31 Oct 2026, 1:04 PM'};
+const GAME_VERSION={n:'75',t:'31 Oct 2026, 1:48 PM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
