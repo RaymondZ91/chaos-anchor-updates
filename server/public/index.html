@@ -4095,7 +4095,7 @@ const KITM={};
 function kitMat(grp,tint,o={}){const key=grp+'|'+(tint==null?'':tint)+'|'+(o.vm?1:0);if(KITM[key]&&!o.fresh)return KITM[key];let m;
   if(grp===3)m=new THREE.MeshBasicMaterial({vertexColors:true,color:new THREE.Color(2.6,2.4,2.1),toneMapped:false});
   else m=new THREE.MeshStandardMaterial({vertexColors:true,roughness:grp===1?.34:grp===0?.62:.7,metalness:grp===1?.72:.06});
-  if(tint!=null&&(grp===2||grp===4))m.color.setHex(tint);if(o.fresh)return m;return KITM[key]=m}
+  if(tint!=null&&(grp===2||grp===4))m.color.setHex(tint);m.userData.vm=!!o.vm||!!o.fresh;if(o.fresh)return m;return KITM[key]=m}
 // a static prop group made of one mesh per material group
 function kitProp(name,tint,x,y,z,ry=0,sx=1,sy=1,sz=1,o={}){const parts=kitParts(name);if(!parts)return null;const g=new THREE.Group();
   for(const{geo,grp}of parts){const m=new THREE.Mesh(geo,kitMat(grp,(grp===2?tint:null)));m.castShadow=o.cast!==false&&grp!==3;m.receiveShadow=true;g.add(m)}
@@ -8657,7 +8657,7 @@ Object.assign(AURA,{warden:{n:16,col:0x40e0ff,tex:'dot',size:2.2,mo:'rise',sp:8,
   talon:{n:12,col:0x3cc8ff,tex:'dot',size:2,mo:'orbit',sp:.9,r:20,add:true},tempest:{n:24,col:0x9fe0ff,tex:'dot',size:1.8,mo:'drift',sp:14,r:22,add:true,rings:true}});
 
 /* version label on the main menu (written by release.sh) */
-const GAME_VERSION={n:'75',t:'31 Oct 2026, 1:48 PM'};
+const GAME_VERSION={n:'76',t:'1 Nov 2026, 5:59 PM'};
 (()=>{const el=mk('div');el.id='verTag';const where=window.__APP?'Desktop app':'claude.ai';el.textContent=`Version 1.${GAME_VERSION.n}${GAME_VERSION.t?' · '+GAME_VERSION.t:''} · ${where}`;document.body.appendChild(el);
   setInterval(()=>{el.hidden=!!mode},500);const st=document.createElement('style');st.textContent='#verTag{position:fixed;right:14px;bottom:10px;z-index:40;font:600 12px var(--ui,sans-serif);letter-spacing:.08em;color:rgba(236,232,225,.6);pointer-events:none;text-shadow:0 1px 2px #000}';document.head.appendChild(st)})();
 
@@ -9112,19 +9112,35 @@ const GFX_HI=()=>SET.gfx.quality!=='potato'&&!SAFE;
     for(let y=0;y<h;y++)for(let xx=0;xx<w;xx++){const a=(dx,dy)=>L[((y+dy+h)%h)*w+((xx+dx+w)%w)];const gx=(a(1,-1)+2*a(1,0)+a(1,1))-(a(-1,-1)+2*a(-1,0)+a(-1,1)),gy=(a(-1,1)+2*a(0,1)+a(1,1))-(a(-1,-1)+2*a(0,-1)+a(1,-1));
       let nx=-gx*k,ny=gy*k,nz=1;const l=Math.hypot(nx,ny,nz);const o=(y*w+xx)*4;p[o]=(nx/l*.5+.5)*255;p[o+1]=(ny/l*.5+.5)*255;p[o+2]=(nz/l*.5+.5)*255;p[o+3]=255}
     x.putImageData(d,0,0);out=new THREE.CanvasTexture(cv);out.wrapS=tex.wrapS;out.wrapT=tex.wrapT;out.repeat.copy(tex.repeat);out.offset.copy(tex.offset);out.anisotropy=tex.anisotropy}catch(e){out=null}nmCache.set(tex,out);return out}
-  const VAR_GLSL=`varying vec3 vGW;
+  const VAR_GLSL=`varying vec3 vGW;varying vec3 vGN;
 float gfxH(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float gfxN(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(gfxH(i),gfxH(i+vec2(1,0)),f.x),mix(gfxH(i+vec2(0,1)),gfxH(i+vec2(1,1)),f.x),f.y);}`;
   const tweak=m=>{if(done.has(m))return;done.add(m);
     if(m.map&&!m.normalMap){const n=normalFrom(m.map);if(n){m.normalMap=n;m.normalScale=new THREE.Vector2(.55,.55)}}
     const prev=m.onBeforeCompile;m.onBeforeCompile=(sh,r)=>{if(prev)prev(sh,r);
-      sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vGW;').replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvGW=(modelMatrix*vec4(transformed,1.)).xyz;');
+      sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vGW;varying vec3 vGN;').replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvGW=(modelMatrix*vec4(transformed,1.)).xyz;vGN=normalize(mat3(modelMatrix)*objectNormal);');
       sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\n'+VAR_GLSL).replace('#include <map_fragment>',`#include <map_fragment>
         {float big=gfxN(vGW.xz*.0016)*.6+gfxN(vGW.xz*.0062+vGW.y*.004)*.4;diffuseColor.rgb*=.86+.26*big;
-         float grime=1.-smoothstep(0.,46.,vGW.y);diffuseColor.rgb*=1.-grime*.16*(.6+.4*gfxN(vGW.xz*.02));}`)};
+         float grime=1.-smoothstep(0.,46.,vGW.y);diffuseColor.rgb*=1.-grime*.16*(.6+.4*gfxN(vGW.xz*.02));
+         // wear and tear: dust settling on tops and floors, rain streaks and damp at the foot of walls, hairline cracks, chipped scuffs
+         vec3 GN=normalize(vGN);float up=clamp(GN.y,0.,1.),side=1.-abs(GN.y);vec2 wp=up>.6?vGW.xz:(abs(GN.x)>abs(GN.z)?vec2(vGW.z,vGW.y):vec2(vGW.x,vGW.y));
+         float n1=gfxN(wp*.021),n2=gfxN(wp*.093),n3=gfxN(wp*.37);
+         float dust=up*smoothstep(.4,.8,gfxN(vGW.xz*.0065)*.6+n2*.4)*.5;
+         float stx=gfxN(vec2(wp.x*.11,3.7));float streak=side*smoothstep(.6,.92,stx)*(.5+.5*gfxN(vec2(wp.x*.11,wp.y*.007)))*smoothstep(0.,60.,vGW.y)*.46;
+         float damp=side*(1.-smoothstep(8.,95.,vGW.y))*smoothstep(.42,.78,n1)*.34;
+         float crack=(1.-smoothstep(0.,.022,abs(gfxN(wp*.047)-.5)))*smoothstep(.5,.7,gfxN(wp*.012+7.))*.58;
+         float chip=smoothstep(.8,.9,n3*.7+n2*.3)*.28;
+         diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.6,.57,.53),clamp(streak+damp,0.,1.));
+         diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.6,.55,.48),dust);diffuseColor.rgb*=1.-crack;diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*1.22+.04,chip);}`)
+        // dents and creases: a dented height field turned into a normal tilt (no extra geometry)
+        .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+        {vec3 GN2=normalize(vGN);vec2 wq=GN2.y>.6?vGW.xz:(abs(GN2.x)>abs(GN2.z)?vec2(vGW.z,vGW.y):vec2(vGW.x,vGW.y));
+         float gfHH=(smoothstep(.62,.95,gfxN(wq*.045))*.9+gfxN(wq*.26)*.18+(1.-smoothstep(0.,.04,abs(gfxN(wq*.03+3.)-.5)))*.35)*4.;
+         vec3 gfSX=dFdx(-vViewPosition),gfSY=dFdy(-vViewPosition);vec3 gfR1=cross(gfSY,normal),gfR2=cross(normal,gfSX);float gfDet=dot(gfSX,gfR1);
+         vec3 gfGr=sign(gfDet)*(dFdx(gfHH)*gfR1+dFdy(gfHH)*gfR2);normal=normalize(abs(gfDet)*normal-gfGr);}`)};
     const key=m.customProgramCacheKey?m.customProgramCacheKey():'';m.customProgramCacheKey=()=>key+'|gfx';m.needsUpdate=true};
   scene.traverse(o=>{if(!o.isMesh||!o.material||o.isSkinnedMesh)return;for(const m of(Array.isArray(o.material)?o.material:[o.material])){
-    if(!m.isMeshStandardMaterial||m.transparent||m.userData.gfxSkip||m.userData.grp!=null)continue;tweak(m)}})})();
+    if(!m.isMeshStandardMaterial||m.transparent||m.userData.gfxSkip||m.userData.vm)continue;tweak(m)}})})();
 
 /* ---------- drifts that blend into the floor ---------- */
 (function drifts(){if(SAFE||THEME==='sky')return;const R=(()=>{let s=4242;return()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff}})();
