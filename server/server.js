@@ -39,13 +39,119 @@ const weekNow = () => Math.floor((Date.now() - Date.UTC(2024, 0, 1)) / 604800000
 const lbNum = (v, max) => { v = Math.floor(+v || 0); return v < 0 ? 0 : v > max ? max : v; };
 let lbDirty = false;
 function lbPut(c, m) {
-  const wk = weekNow(), n = clean(m.n, 14) || c.name;
+  const wk = weekNow(), n = c.acctName || clean(m.n, 16) || c.name;
   LB.players[c.uid] = { n, aw: lbNum(m.aw, 1e6), k: lbNum(m.k, 1e7), bs: lbNum(m.bs, 1e5), apt: lbNum(m.apt, 1e9), at: Date.now() };
   const week = (w, wins, pt) => { w = w | 0; if (w !== wk && w !== wk - 1) return; const W = LB.weeks[w] || (LB.weeks[w] = {}); W[c.uid] = { n, w: lbNum(wins, 1e5), pt: lbNum(pt, 604800) }; };
   week(m.wk, m.w, m.pt); if (m.lw && typeof m.lw === 'object') week(m.lw.wk, m.lw.w, m.lw.pt);
   for (const k of Object.keys(LB.weeks)) if (+k < wk - 1) delete LB.weeks[k];
   lbDirty = true;
 }
+
+// ================= Doodle Duels accounts, owner tools, events, bans, chat filter =================
+// Accounts: username (3-16 letters/numbers/_) + password. Progress is stored with the account.
+// Storage: Upstash Redis if UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set (permanent),
+// otherwise this server's own file (lost when a free Render server restarts; players' devices re-upload it).
+const DD_OWNER = 'xuerou550091';
+const DD_OWNER_HASH = 'd7cff5a46ec655a27ba6fe16f3eba332e4b89911596a09ff080482119fe50a03';   // one-way hash of the owner's setup code
+const isDDOwnerCode = k => typeof k === 'string' && k.length < 60 && crypto.createHash('sha256').update('doodle-duels-owner:' + k.trim().toUpperCase()).digest('hex') === DD_OWNER_HASH;
+const UP_URL = (process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, ''), UP_TOK = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+DB.kv = DB.kv || {};
+async function kvGet(k) {
+  if (UP_URL && UP_TOK && typeof fetch === 'function') { try { const r = await fetch(UP_URL + '/get/' + encodeURIComponent(k), { headers: { Authorization: 'Bearer ' + UP_TOK } }); const j = await r.json(); if (j && j.result) return JSON.parse(j.result); return DB.kv[k] || null; } catch (e) { return DB.kv[k] || null; } }
+  return DB.kv[k] || null;
+}
+function kvSet(k, v) {
+  DB.kv[k] = v; lbDirty = true;
+  if (UP_URL && UP_TOK && typeof fetch === 'function') fetch(UP_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + UP_TOK, 'content-type': 'application/json' }, body: JSON.stringify(['SET', k, JSON.stringify(v)]) }).catch(() => {});
+}
+const acctKey = n => 'acct:' + String(n).toLowerCase();
+const validName = n => typeof n === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(n);
+const pwHash = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString('hex');
+const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
+const online = new Map();   // lower name -> set of connections
+function bindAcct(c, a) {
+  if (c.acct && online.get(c.acct)) online.get(c.acct).delete(c);
+  c.acct = a.lower; c.acctName = a.name; c.ddOwner = !!a.owner; c.name = a.name; names.set(c.uid, a.name);
+  if (!online.has(a.lower)) online.set(a.lower, new Set()); online.get(a.lower).add(c);
+}
+function newSession(a) { const key = crypto.randomBytes(24).toString('hex'); a.keys = [...(a.keys || []).slice(-4), sha(key)]; return key; }
+function acctReply(a, key) { const g = a.grants || []; a.grants = []; return { ok: true, name: a.name, key, owner: !!a.owner, rec: { salt: a.salt, hash: a.hash }, profile: a.profile || null, pAt: a.pAt || 0, grants: g }; }
+async function acctMsg(c, m) {
+  if (m.t === 'acct_create') {
+    if (!validName(m.name)) return { error: 'Usernames are 3-16 letters, numbers or _' };
+    if (typeof m.pw !== 'string' || m.pw.length < 4 || m.pw.length > 64) return { error: 'Passwords need at least 4 characters' };
+    if (BAD_RE.test(m.name.toLowerCase())) return { error: 'Please pick a different username' };
+    const lower = m.name.toLowerCase();
+    if (lower === DD_OWNER && !isDDOwnerCode(m.oc)) return { error: 'That username is reserved' };
+    if (await kvGet(acctKey(lower))) return { error: 'That username is taken' };
+    const salt = crypto.randomBytes(12).toString('hex');
+    const a = { name: m.name, lower, salt, hash: pwHash(m.pw, salt), owner: lower === DD_OWNER, created: Date.now(), keys: [], grants: [] };
+    if (m.profile && typeof m.profile === 'object' && Buffer.byteLength(JSON.stringify(m.profile)) < 200000) { a.profile = m.profile; a.pAt = Date.now(); }
+    const key = newSession(a); kvSet(acctKey(lower), a); bindAcct(c, a); return acctReply(a, key);
+  }
+  if (m.t === 'acct_login') {
+    if (!validName(m.name)) return { error: 'Wrong username or password' };
+    const a = await kvGet(acctKey(m.name)); if (!a || pwHash(m.pw || '', a.salt) !== a.hash) return { error: 'Wrong username or password' };
+    if (a.banned) return { error: 'This account is banned' };
+    const key = newSession(a); kvSet(acctKey(a.lower), a); bindAcct(c, a); return acctReply(a, key);
+  }
+  if (m.t === 'acct_resume') {
+    if (!validName(m.name) || typeof m.key !== 'string') return { error: 'bad' };
+    const lower = m.name.toLowerCase(); let a = await kvGet(acctKey(lower));
+    if (!a) {   // the server forgot (restart without a database): rebuild the account from the player's device
+      if (lower === DD_OWNER && !isDDOwnerCode(m.oc)) return { error: 'gone' };
+      if (!m.rec || typeof m.rec.salt !== 'string' || typeof m.rec.hash !== 'string') return { error: 'gone' };
+      a = { name: m.name, lower, salt: m.rec.salt.slice(0, 64), hash: m.rec.hash.slice(0, 128), owner: lower === DD_OWNER, created: Date.now(), keys: [sha(m.key)], grants: [] };
+      if (m.profile && typeof m.profile === 'object' && Buffer.byteLength(JSON.stringify(m.profile)) < 200000) { a.profile = m.profile; a.pAt = Date.now(); }
+      kvSet(acctKey(lower), a);
+    }
+    if (!(a.keys || []).includes(sha(m.key))) return { error: 'Please log in again' };
+    if (a.banned) return { error: 'This account is banned' };
+    bindAcct(c, a); const r = acctReply(a, m.key); kvSet(acctKey(lower), a); return r;
+  }
+  if (m.t === 'acct_save') {
+    if (!c.acct || !m.profile || typeof m.profile !== 'object' || Buffer.byteLength(JSON.stringify(m.profile)) > 200000) return { error: 'not saved' };
+    const a = await kvGet(acctKey(c.acct)); if (!a) return { error: 'gone' };
+    a.profile = m.profile; a.pAt = Date.now(); kvSet(acctKey(c.acct), a); return { ok: true };
+  }
+  // ---------- owner tools (only the owner account)
+  if (!m.t.startsWith('own_')) return null;
+  if (!c.ddOwner) return { error: 'Only the owner can do that' };
+  if (m.t === 'own_list') { const out = []; for (const [lower, set] of online) if (set.size) { const x = [...set][0]; out.push(x.acctName || lower); } return { ok: true, players: out }; }
+  if (m.t === 'own_event') {
+    const kind = ['rain', 'crates'].includes(m.kind) ? m.kind : 'rain', n = Math.max(5, Math.min(200, m.n | 0 || 40));
+    for (const x of clients) send(x, { t: 'event', kind, n, seed: Math.floor(Math.random() * 1e9), by: c.acctName });
+    return { ok: true };
+  }
+  if (!validName(m.to)) return { error: 'Type a username' };
+  const a = await kvGet(acctKey(m.to)); if (!a) return { error: 'No account called ' + m.to };
+  const tell = msg => { for (const x of online.get(a.lower) || []) send(x, msg); };
+  if (m.t === 'own_give' || m.t === 'own_spin' || m.t === 'own_crates') {
+    const g = m.t === 'own_give' ? { erasers: Math.max(-1e6, Math.min(1e6, m.n | 0)) } : m.t === 'own_crates' ? { crates: Math.max(1, Math.min(1000, m.n | 0)) } : { spin: String(m.tier || 'mythic').slice(0, 20) };
+    g.from = c.acctName;
+    if ((online.get(a.lower) || new Set()).size) tell({ t: 'grant', g }); else { a.grants = [...(a.grants || []), g].slice(-50); kvSet(acctKey(a.lower), a); }
+    return { ok: true };
+  }
+  if (m.t === 'own_ban') {
+    if (a.owner) return { error: 'You can\'t ban the owner' };
+    a.banned = !!m.on; a.keys = m.on ? [] : a.keys; kvSet(acctKey(a.lower), a);
+    if (m.on) for (const x of online.get(a.lower) || []) { send(x, { t: 'acct_banned' }); setTimeout(() => { try { x.ws.close(); } catch (e) {} }, 300); }
+    return { ok: true };
+  }
+  if (m.t === 'own_mute') { a.muted = !!m.on; kvSet(acctKey(a.lower), a); for (const x of online.get(a.lower) || []) { x.muted = a.muted; send(x, { t: 'muted', on: a.muted }); } return { ok: true }; }
+  return { error: 'unknown' };
+}
+// chat filter: swear words, links, phone numbers
+const BAD_WORDS = ['fuck', 'fuk', 'fck', 'shit', 'bitch', 'bastard', 'cunt', 'dick', 'pussy', 'asshole', 'slut', 'whore', 'nigger', 'nigga', 'faggot', 'fag', 'retard', 'kys', 'rape', 'porn', 'sex', 'nazi', 'wank', 'twat', 'bollocks', 'cock', 'penis', 'vagina', 'boob', 'tits'];
+const BAD_RE = new RegExp(BAD_WORDS.map(w => w.split('').join('[^a-z0-9]?')).join('|'), 'i');
+function cleanChat(t) {
+  t = String(t || '').slice(0, 90);
+  t = t.replace(/(https?:\/\/|www\.)\S+|\b\S+\.(com|net|org|gg|io|xyz|ru|ly)\b\S*/gi, '[link removed]');
+  t = t.replace(/\d[\d\s-]{6,}\d/g, '###');
+  for (const w of BAD_WORDS) t = t.replace(new RegExp(w.split('').join('[^a-z0-9]?'), 'gi'), s => '#'.repeat(s.length));
+  return t;
+}
+
 function lbGet(c) {
   const wk = weekNow(), cur = LB.weeks[wk] || {}, prev = LB.weeks[wk - 1] || {};
   const rows = (obj, key) => Object.entries(obj).map(([id, r]) => [id, r.n, r[key] | 0]).filter(r => r[2] > 0).sort((a, b) => b[2] - a[2]);
@@ -85,6 +191,9 @@ function leaveRoom(c, name) {
 }
 function setPresence(c, name, patch) {
   const id = c.rooms.get(name); if (!id || !patch || typeof patch !== 'object' || Array.isArray(patch)) return;
+  if (Array.isArray(patch.cm)) { if (c.muted) delete patch.cm; else patch.cm = patch.cm.slice(0, 6).map(x => Array.isArray(x) ? [x[0], String(x[1] || '').slice(0, 20), cleanChat(x[2]), x[3]] : x); }
+  if ('og' in patch && !c.ddOwner) delete patch.og;
+  if (c.acctName && typeof patch.n === 'string') patch.n = c.acctName;
   const e = rooms.get(name).get(id); const next = Object.assign({}, e.presence);
   for (const k of Object.keys(patch).slice(0, 40)) { if (patch[k] === null) delete next[k]; else next[k] = patch[k]; }
   if (Buffer.byteLength(JSON.stringify(next)) > MAX_PRESENCE) return;
@@ -136,6 +245,8 @@ wss.on('connection', ws => {
         for (const [id, n] of names) { if (id === c.uid) continue; const full = n + '#' + tagOf(id); if (!q || full.toLowerCase().includes(q)) out.push({ id, name: full }); if (out.length >= 20) break; }
         send(c, { t: 'reply', rid: m.rid, data: out }); break;
       }
+      case 'acct_create': case 'acct_login': case 'acct_resume': case 'acct_save': case 'own_list': case 'own_event': case 'own_give': case 'own_spin': case 'own_crates': case 'own_ban': case 'own_mute':
+        acctMsg(c, m).then(r => { if (r && r.ok && (m.t === 'acct_resume' || m.t === 'acct_login' || m.t === 'acct_create')) { kvGet(acctKey(c.acct)).then(a => { c.muted = !!(a && a.muted); }); } send(c, { t: 'reply', rid: m.rid, data: r }); }).catch(e => send(c, { t: 'reply', rid: m.rid, data: { error: 'server error' } })); break;
       case 'lb_put': { if (Date.now() - (c.lbAt || 0) > 5000) { c.lbAt = Date.now(); lbPut(c, m); } send(c, { t: 'reply', rid: m.rid, data: true }); break; }
       case 'lb_get': send(c, { t: 'reply', rid: m.rid, data: lbGet(c) }); break;
       case 'db_get': { const p = clean(m.path, 200); send(c, { t: 'reply', rid: m.rid, data: p === 'config/admins' ? adminDoc() : (DB[p] || null) }); break; }
@@ -148,12 +259,13 @@ wss.on('connection', ws => {
       }
     }
   });
-  ws.on('close', () => { for (const name of [...c.rooms.keys()]) leaveRoom(c, name); clients.delete(c); });
+  ws.on('close', () => { for (const name of [...c.rooms.keys()]) leaveRoom(c, name); clients.delete(c); if (c.acct && online.get(c.acct)) online.get(c.acct).delete(c); });
 });
 
 // refill flood budgets, drop dead connections
 const iv1 = setInterval(() => { for (const c of clients) c.budget = RATE; }, 1000);
-const iv3 = setInterval(() => { if (lbDirty) { lbDirty = false; saveDB(); } }, 30000);
+const iv3 = setInterval(() => { if (lbDirty) { lbDirty = false; saveDB(); if (UP_URL && UP_TOK) kvSet('lb', LB); } }, 30000);
+if (UP_URL && UP_TOK) kvGet('lb').then(v => { if (v && v.players) { Object.assign(LB.players, v.players); Object.assign(LB.weeks, v.weeks || {}); } });
 const iv2 = setInterval(() => { for (const c of clients) { if (!c.alive) { c.ws.terminate(); continue; } c.alive = false; try { c.ws.ping(); } catch (e) {} } }, 20000);
 
 return new Promise((resolve, reject) => {
