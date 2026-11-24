@@ -18,9 +18,9 @@ function start(opt) { opt = opt || {};
 const PORT = opt.port != null ? opt.port : (+process.env.PORT || 8080);
 const OWNER_ID = (opt.owner || process.env.OWNER_ID || '').trim();
 const DATA_FILE = path.join(opt.dataDir || __dirname, 'data.json');
-const MAX_MSG = 16 * 1024;            // biggest single message accepted
-const MAX_PRESENCE = 8 * 1024;        // biggest presence object kept per player
-const RATE = 60;
+const MAX_MSG = 48 * 1024;            // biggest single message accepted
+const MAX_PRESENCE = 24 * 1024;        // biggest presence object kept per player
+const RATE = 120;
 const OWNER2_HASH = '85b72b321284915c6a8d720bee5503b25e19b0c2ce2859e1957ecd85c03acd8d';   // one-way hash of the game owner's private code: whoever proves it can manage admins and bans
 const isOwnerKey = k => typeof k === 'string' && k.length < 80 && crypto.createHash('sha256').update('chaos-anchor-owner2:' + k.trim().toUpperCase()).digest('hex') === OWNER2_HASH;                      // messages per second per connection before we start dropping
 
@@ -31,6 +31,29 @@ const envAdmins = (process.env.ADMINS || '').split(',').map(s => s.trim()).filte
 function adminDoc() { const d = DB['config/admins'] || { ids: [] }; return { ids: [...new Set([...(d.ids || []), ...envAdmins])], owner: OWNER_ID || d.owner || null }; }
 function bannedIds() { const d = DB['config/bans']; return d && Array.isArray(d.ids) ? d.ids : []; }
 function saveDB() { try { fs.writeFileSync(DATA_FILE, JSON.stringify(DB)); } catch (e) {} }
+
+// ---- Doodle Duels leaderboards. Each player reports their own totals (kept on their device), so the boards rebuild
+// themselves from whoever connects if this server restarts and forgets. Weeks start Monday 00:00 UTC.
+const LB = DB.lb = Object.assign({ players: {}, weeks: {} }, DB.lb || {});
+const weekNow = () => Math.floor((Date.now() - Date.UTC(2024, 0, 1)) / 604800000);
+const lbNum = (v, max) => { v = Math.floor(+v || 0); return v < 0 ? 0 : v > max ? max : v; };
+let lbDirty = false;
+function lbPut(c, m) {
+  const wk = weekNow(), n = clean(m.n, 14) || c.name;
+  LB.players[c.uid] = { n, aw: lbNum(m.aw, 1e6), k: lbNum(m.k, 1e7), bs: lbNum(m.bs, 1e5), apt: lbNum(m.apt, 1e9), at: Date.now() };
+  const week = (w, wins, pt) => { w = w | 0; if (w !== wk && w !== wk - 1) return; const W = LB.weeks[w] || (LB.weeks[w] = {}); W[c.uid] = { n, w: lbNum(wins, 1e5), pt: lbNum(pt, 604800) }; };
+  week(m.wk, m.w, m.pt); if (m.lw && typeof m.lw === 'object') week(m.lw.wk, m.lw.w, m.lw.pt);
+  for (const k of Object.keys(LB.weeks)) if (+k < wk - 1) delete LB.weeks[k];
+  lbDirty = true;
+}
+function lbGet(c) {
+  const wk = weekNow(), cur = LB.weeks[wk] || {}, prev = LB.weeks[wk - 1] || {};
+  const rows = (obj, key) => Object.entries(obj).map(([id, r]) => [id, r.n, r[key] | 0]).filter(r => r[2] > 0).sort((a, b) => b[2] - a[2]);
+  const pack = (obj, key) => { const all = rows(obj, key), i = all.findIndex(r => r[0] === c.uid); return { top: all.slice(0, 25).map(r => [r[0] === c.uid ? 1 : 0, r[1], r[2]]), me: i + 1, total: all.length }; };
+  const place = (obj, key) => rows(obj, key).findIndex(r => r[0] === c.uid) + 1;
+  return { wk, boards: { ww: pack(cur, 'w'), wpt: pack(cur, 'pt'), aw: pack(LB.players, 'aw'), k: pack(LB.players, 'k'), bs: pack(LB.players, 'bs') },
+    prev: { wk: wk - 1, ww: place(prev, 'w'), wpt: place(prev, 'pt'), total: Object.keys(prev).length } };
+}
 
 const uidOf = token => 'u_' + crypto.createHash('sha256').update('chaos-anchor:' + token).digest('base64url').slice(0, 22);
 const tagOf = uid => String(parseInt(crypto.createHash('md5').update(uid).digest('hex').slice(0, 6), 16) % 9000 + 1000);
@@ -113,6 +136,8 @@ wss.on('connection', ws => {
         for (const [id, n] of names) { if (id === c.uid) continue; const full = n + '#' + tagOf(id); if (!q || full.toLowerCase().includes(q)) out.push({ id, name: full }); if (out.length >= 20) break; }
         send(c, { t: 'reply', rid: m.rid, data: out }); break;
       }
+      case 'lb_put': { if (Date.now() - (c.lbAt || 0) > 5000) { c.lbAt = Date.now(); lbPut(c, m); } send(c, { t: 'reply', rid: m.rid, data: true }); break; }
+      case 'lb_get': send(c, { t: 'reply', rid: m.rid, data: lbGet(c) }); break;
       case 'db_get': { const p = clean(m.path, 200); send(c, { t: 'reply', rid: m.rid, data: p === 'config/admins' ? adminDoc() : (DB[p] || null) }); break; }
       case 'db_set': {
         const p = clean(m.path, 200);
@@ -128,12 +153,13 @@ wss.on('connection', ws => {
 
 // refill flood budgets, drop dead connections
 const iv1 = setInterval(() => { for (const c of clients) c.budget = RATE; }, 1000);
+const iv3 = setInterval(() => { if (lbDirty) { lbDirty = false; saveDB(); } }, 30000);
 const iv2 = setInterval(() => { for (const c of clients) { if (!c.alive) { c.ws.terminate(); continue; } c.alive = false; try { c.ws.ping(); } catch (e) {} } }, 20000);
 
 return new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, opt.host || '0.0.0.0', () => { const port = server.address().port; if (!opt.quiet) console.log('Chaos Anchor server listening on port ' + port + (OWNER_ID ? ' · owner ' + OWNER_ID : ' · no OWNER_ID set yet'));
-    resolve({ port, players: () => clients.size, close() { clearInterval(iv1); clearInterval(iv2); for (const c of clients) { try { c.ws.terminate(); } catch (e) {} } try { wss.close(); } catch (e) {} return new Promise(r => server.close(() => r())); } }); });
+    resolve({ port, players: () => clients.size, close() { clearInterval(iv1); clearInterval(iv2); clearInterval(iv3); for (const c of clients) { try { c.ws.terminate(); } catch (e) {} } try { wss.close(); } catch (e) {} return new Promise(r => server.close(() => r())); } }); });
 });
 }
 module.exports = { start };
