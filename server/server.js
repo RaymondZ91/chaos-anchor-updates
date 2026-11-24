@@ -211,7 +211,7 @@ const server = http.createServer((req, res) => {
   if (GAME && (req.url === '/' || req.url.startsWith('/?') || req.url === '/play')) { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }); return res.end(GAME); }
   const lobby = rooms.get('lobby');
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-  res.end(`Chaos Anchor server is running. Play at / .\nPlayers online: ${lobby ? lobby.size : 0}\nMatches running: ${Math.max(0, rooms.size - 1)}\n`);
+  res.end(`Doodle Duels server is running. Play at / .\nPlayers online: ${lobby ? lobby.size : 0}\nMatches running: ${Math.max(0, rooms.size - 1)}\nSaved data: ${UP_URL && UP_TOK ? 'permanent database (Upstash) connected' : 'temporary (resets when the server restarts)'}\n`);
 });
 const wss = new WebSocketServer({ server, maxPayload: MAX_MSG });
 
