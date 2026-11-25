@@ -68,6 +68,7 @@ const acctKey = n => 'acct:' + String(n).toLowerCase();
 const validName = n => typeof n === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(n);
 const pwHash = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString('hex');
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
+const SERVER_BUILD = '113';
 const online = new Map();   // lower name -> set of connections
 function bindAcct(c, a) {
   if (c.acct && online.get(c.acct)) online.get(c.acct).delete(c);
@@ -211,7 +212,7 @@ const server = http.createServer((req, res) => {
   if (GAME && (req.url === '/' || req.url.startsWith('/?') || req.url === '/play')) { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }); return res.end(GAME); }
   const lobby = rooms.get('lobby');
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-  res.end(`Doodle Duels server is running. Play at / .\nPlayers online: ${lobby ? lobby.size : 0}\nMatches running: ${Math.max(0, rooms.size - 1)}\nSaved data: ${UP_URL && UP_TOK ? 'permanent database (Upstash) connected' : 'temporary (resets when the server restarts)'}\n`);
+  res.end(`Doodle Duels server is running (build ${SERVER_BUILD}). Play at / .\nPlayers online: ${lobby ? lobby.size : 0}\nMatches running: ${Math.max(0, rooms.size - 1)}\nSaved data: ${UP_URL && UP_TOK ? 'permanent database (Upstash) connected' : 'temporary (resets when the server restarts)'}\n`);
 });
 const wss = new WebSocketServer({ server, maxPayload: MAX_MSG });
 
