@@ -247,6 +247,18 @@ wss.on('connection', ws => {
       }
       case 'acct_create': case 'acct_login': case 'acct_resume': case 'acct_save': case 'own_list': case 'own_event': case 'own_give': case 'own_spin': case 'own_crates': case 'own_ban': case 'own_mute':
         acctMsg(c, m).then(r => { if (r && r.ok && (m.t === 'acct_resume' || m.t === 'acct_login' || m.t === 'acct_create')) { kvGet(acctKey(c.acct)).then(a => { c.muted = !!(a && a.muted); }); } send(c, { t: 'reply', rid: m.rid, data: r }); }).catch(e => send(c, { t: 'reply', rid: m.rid, data: { error: 'server error' } })); break;
+      case 'fr_status': {   // which of these account names are online right now
+        const out = {}; for (const n of (Array.isArray(m.names) ? m.names.slice(0, 60) : [])) { if (typeof n !== 'string') continue; const l = n.toLowerCase().slice(0, 16); const set = online.get(l); out[l] = !!(set && set.size); }
+        send(c, { t: 'reply', rid: m.rid, data: out }); break;
+      }
+      case 'fr_invite': {   // invite a friend (by account name) to your private game code
+        let r = { error: 'Log in to invite friends' };
+        if (c.acct && typeof m.to === 'string' && /^dd-[a-z0-9]{3,12}$/.test(String(m.code || '')) && Date.now() - (c.invAt || 0) > 2500) {
+          c.invAt = Date.now(); const set = online.get(m.to.toLowerCase().slice(0, 16));
+          if (set && set.size) { for (const x of set) send(x, { t: 'invite', from: c.acctName, code: m.code, size: Math.max(1, Math.min(5, m.size | 0)) }); r = { ok: true }; } else r = { error: 'They are offline' };
+        } else if (c.acct) r = { error: 'Slow down a little' };
+        send(c, { t: 'reply', rid: m.rid, data: r }); break;
+      }
       case 'lb_put': { if (Date.now() - (c.lbAt || 0) > 5000) { c.lbAt = Date.now(); lbPut(c, m); } send(c, { t: 'reply', rid: m.rid, data: true }); break; }
       case 'lb_get': send(c, { t: 'reply', rid: m.rid, data: lbGet(c) }); break;
       case 'db_get': { const p = clean(m.path, 200); send(c, { t: 'reply', rid: m.rid, data: p === 'config/admins' ? adminDoc() : (DB[p] || null) }); break; }
