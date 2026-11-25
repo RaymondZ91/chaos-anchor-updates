@@ -127,7 +127,7 @@ async function acctMsg(c, m) {
   const a = await kvGet(acctKey(m.to)); if (!a) return { error: 'No account called ' + m.to };
   const tell = msg => { for (const x of online.get(a.lower) || []) send(x, msg); };
   if (m.t === 'own_give' || m.t === 'own_spin' || m.t === 'own_crates') {
-    const g = m.t === 'own_give' ? { erasers: Math.max(-1e6, Math.min(1e6, m.n | 0)) } : m.t === 'own_crates' ? { crates: Math.max(1, Math.min(1000, m.n | 0)) } : { spin: String(m.tier || 'mythic').slice(0, 20) };
+    const g = m.t === 'own_give' ? { erasers: Math.max(-1e6, Math.min(1e6, m.n | 0)) } : m.t === 'own_crates' ? { crates: Math.max(1, Math.min(1000, m.n | 0)), kind: ['sketchy', 'prism', 'notebook'].includes(m.kind) ? m.kind : 'sketchy' } : { spin: String(m.tier || 'mythic').slice(0, 20) };
     g.from = c.acctName;
     if ((online.get(a.lower) || new Set()).size) tell({ t: 'grant', g }); else { a.grants = [...(a.grants || []), g].slice(-50); kvSet(acctKey(a.lower), a); }
     return { ok: true };
