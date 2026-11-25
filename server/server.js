@@ -40,7 +40,7 @@ const lbNum = (v, max) => { v = Math.floor(+v || 0); return v < 0 ? 0 : v > max 
 let lbDirty = false;
 function lbPut(c, m) {
   const wk = weekNow(), n = c.acctName || clean(m.n, 16) || c.name;
-  LB.players[c.uid] = { n, aw: lbNum(m.aw, 1e6), k: lbNum(m.k, 1e7), bs: lbNum(m.bs, 1e5), apt: lbNum(m.apt, 1e9), at: Date.now() };
+  LB.players[c.uid] = { n, aw: lbNum(m.aw, 1e6), k: lbNum(m.k, 1e7), bs: lbNum(m.bs, 1e5), apt: lbNum(m.apt, 1e9), rg: lbNum(m.rg, 300), at: Date.now() };
   const week = (w, wins, pt) => { w = w | 0; if (w !== wk && w !== wk - 1) return; const W = LB.weeks[w] || (LB.weeks[w] = {}); W[c.uid] = { n, w: lbNum(wins, 1e5), pt: lbNum(pt, 604800) }; };
   week(m.wk, m.w, m.pt); if (m.lw && typeof m.lw === 'object') week(m.lw.wk, m.lw.w, m.lw.pt);
   for (const k of Object.keys(LB.weeks)) if (+k < wk - 1) delete LB.weeks[k];
@@ -68,7 +68,7 @@ const acctKey = n => 'acct:' + String(n).toLowerCase();
 const validName = n => typeof n === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(n);
 const pwHash = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString('hex');
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
-const SERVER_BUILD = '113';
+const SERVER_BUILD = '114';
 const online = new Map();   // lower name -> set of connections
 function bindAcct(c, a) {
   if (c.acct && online.get(c.acct)) online.get(c.acct).delete(c);
@@ -158,7 +158,7 @@ function lbGet(c) {
   const rows = (obj, key) => Object.entries(obj).map(([id, r]) => [id, r.n, r[key] | 0]).filter(r => r[2] > 0).sort((a, b) => b[2] - a[2]);
   const pack = (obj, key) => { const all = rows(obj, key), i = all.findIndex(r => r[0] === c.uid); return { top: all.slice(0, 25).map(r => [r[0] === c.uid ? 1 : 0, r[1], r[2]]), me: i + 1, total: all.length }; };
   const place = (obj, key) => rows(obj, key).findIndex(r => r[0] === c.uid) + 1;
-  return { wk, boards: { ww: pack(cur, 'w'), wpt: pack(cur, 'pt'), aw: pack(LB.players, 'aw'), k: pack(LB.players, 'k'), bs: pack(LB.players, 'bs') },
+  return { wk, boards: { ww: pack(cur, 'w'), wpt: pack(cur, 'pt'), aw: pack(LB.players, 'aw'), k: pack(LB.players, 'k'), bs: pack(LB.players, 'bs'), rg: pack(LB.players, 'rg') },
     prev: { wk: wk - 1, ww: place(prev, 'w'), wpt: place(prev, 'pt'), total: Object.keys(prev).length } };
 }
 
