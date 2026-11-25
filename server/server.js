@@ -68,7 +68,7 @@ const acctKey = n => 'acct:' + String(n).toLowerCase();
 const validName = n => typeof n === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(n);
 const pwHash = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString('hex');
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
-const SERVER_BUILD = '126';
+const SERVER_BUILD = '127';
 const online = new Map();   // lower name -> set of connections
 function bindAcct(c, a) {
   if (c.acct && online.get(c.acct)) online.get(c.acct).delete(c);
