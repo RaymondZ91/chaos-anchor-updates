@@ -68,7 +68,8 @@ const acctKey = n => 'acct:' + String(n).toLowerCase();
 const validName = n => typeof n === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(n);
 const pwHash = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString('hex');
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
-const SERVER_BUILD = '132';
+let EVENTS = { double: 0 }; setTimeout(() => kvGet('dd:events').then(e => { if (e && typeof e === 'object') EVENTS = Object.assign(EVENTS, e); }).catch(() => {}), 500);
+const SERVER_BUILD = '133';
 const online = new Map();   // lower name -> set of connections
 function bindAcct(c, a) {
   if (c.acct && online.get(c.acct)) online.get(c.acct).delete(c);
@@ -119,6 +120,11 @@ async function acctMsg(c, m) {
   if (!m.t.startsWith('own_')) return null;
   if (!c.ddOwner) return { error: 'Only the owner can do that' };
   if (m.t === 'own_list') { const out = []; for (const [lower, set] of online) if (set.size) { const x = [...set][0]; out.push(x.acctName || lower); } return { ok: true, players: out }; }
+  if (m.t === 'own_event' && m.kind === 'double') {   // double Erasers for everyone for a few hours
+    const hrs = Math.max(0, Math.min(72, +m.n || 0)); EVENTS.double = hrs ? Date.now() + hrs * 3600000 : 0; kvSet('dd:events', EVENTS);
+    for (const x of clients) send(x, { t: 'event', kind: 'double', until: EVENTS.double, by: c.acctName });
+    return { ok: true };
+  }
   if (m.t === 'own_event') {
     const kind = ['rain', 'crates'].includes(m.kind) ? m.kind : 'rain', n = Math.max(5, Math.min(200, m.n | 0 || 40));
     for (const x of clients) send(x, { t: 'event', kind, n, seed: Math.floor(Math.random() * 1e9), by: c.acctName });
@@ -260,6 +266,7 @@ wss.on('connection', ws => {
         } else if (c.acct) r = { error: 'Slow down a little' };
         send(c, { t: 'reply', rid: m.rid, data: r }); break;
       }
+      case 'ev_get': send(c, { t: 'reply', rid: m.rid, data: { double: EVENTS.double || 0 } }); break;
       case 'lb_put': { if (Date.now() - (c.lbAt || 0) > 5000) { c.lbAt = Date.now(); lbPut(c, m); } send(c, { t: 'reply', rid: m.rid, data: true }); break; }
       case 'lb_get': send(c, { t: 'reply', rid: m.rid, data: lbGet(c) }); break;
       case 'db_get': { const p = clean(m.path, 200); send(c, { t: 'reply', rid: m.rid, data: p === 'config/admins' ? adminDoc() : (DB[p] || null) }); break; }
