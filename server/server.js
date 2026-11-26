@@ -69,7 +69,7 @@ const validName = n => typeof n === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(n);
 const pwHash = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString('hex');
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 let EVENTS = { double: 0 }; setTimeout(() => kvGet('dd:events').then(e => { if (e && typeof e === 'object') EVENTS = Object.assign(EVENTS, e); }).catch(() => {}), 500);
-const SERVER_BUILD = '210';
+const SERVER_BUILD = '211';
 const online = new Map();   // lower name -> set of connections
 function bindAcct(c, a) {
   if (c.acct && online.get(c.acct)) online.get(c.acct).delete(c);
